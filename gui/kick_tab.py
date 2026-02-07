@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 from generators.kick_generator import TranceKickGenerator
+from utils.security import validate_filename
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -122,6 +123,12 @@ class KickTab(ttk.Frame):
 
             if not filename.endswith('.wav'):
                 filename += '.wav'
+
+            # Validate filename
+            is_valid, error_msg = validate_filename(filename)
+            if not is_valid:
+                messagebox.showerror("Invalid Filename", error_msg)
+                return
 
             self.main_window.status_var.set("Generating Kick...")
             self.update_idletasks()
