@@ -49,7 +49,7 @@ Here is a detailed breakdown of what the system does:
 ### Running the GUI
 To open the visual interface:
 ```bash
-python3 kick_gui.py
+python3 main.py
 ```
 
 ### GUI Controls
@@ -68,8 +68,17 @@ The interface is organized into three tabs:
     *   *Sidechain Depth:* How much the bass volume drops when the kick hits.
     *   *Export Trigger:* Button to save `sidechain_trigger.wav`.
 
+### New Features (Clap & Combo)
+1.  **Clap Generator Tab:**
+    *   Create custom trance claps with adjustable transient, tail, reflections, and spacing.
+    *   Includes Stereo Width control for wide claps.
+2.  **Pattern/Combo Tab:**
+    *   Generates a full 4-bar loop (138 BPM).
+    *   Automatically layers your designed Kick and Clap.
+    *   Controls for Swing, Kick Volume, and Clap Volume.
+
 ### Command Line Interface (CLI)
-You can also run the generator without the GUI:
+You can also run the generator without the GUI using the module directly:
 ```bash
-python3 kick_generator.py --output my_kick.wav --drive 6.0 --click-level 1.5
+python3 -m generators.kick_generator --output my_kick.wav --drive 6.0 --click-level 1.5
 ```

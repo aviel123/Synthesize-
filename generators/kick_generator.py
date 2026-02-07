@@ -2,6 +2,14 @@ import numpy as np
 from scipy.io import wavfile
 import argparse
 
+from effects.saturation import apply_saturation
+from effects.compression import apply_compression
+from effects.eq import apply_eq
+from effects.reverb import apply_reverb
+from effects.delay import apply_delay
+from effects.limiter import apply_limiter
+from effects.stereo import apply_stereo_width
+
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
         self.sample_rate = sample_rate
@@ -188,211 +196,6 @@ class TranceKickGenerator:
 
         return filtered_noise * amp_env * level
 
-    def apply_saturation(self, signal, drive_db=4.5):
-        """
-        Step 4: Saturation and Harmonics
-        Add Saturator/Overdrive to the kick body.
-        Drive: 3-6dB.
-        """
-        # Convert dB to linear gain
-        drive_gain = 10 ** (drive_db / 20.0)
-
-        # Soft clipping using tanh
-        # This creates harmonics
-        saturated_signal = np.tanh(signal * drive_gain)
-
-        # We might want to normalize or recover gain, but saturation naturally compresses dynamics.
-
-        return saturated_signal
-
-    def apply_compression(self, signal, threshold_db=-10.0, ratio=6.0, attack_ms=2.0, release_ms=150.0):
-        """
-        Step 5: Compression
-        Attack: 1-5ms (lets transients through), Release: 100-200ms.
-        Ratio: 4:1 - 8:1.
-        """
-        threshold = 10 ** (threshold_db / 20.0)
-
-        # Envelope detection
-        # We need a loop for signal-dependent attack/release
-        # 0.5s is short enough for python loop
-
-        num_samples = len(signal)
-        gain_reduction = np.ones(num_samples)
-
-        # Attack/Release coefficients
-        # alpha = exp(-1 / (time * sample_rate))
-        # Actually standard formula is exp(-1 / (time_in_seconds * sample_rate))?
-        # Or time constant tau? t = -1/ln(alpha) -> alpha = exp(-1/t).
-        # Usually defined as time to reach 63% or similar.
-
-        dt = 1.0 / self.sample_rate
-        alpha_attack = np.exp(-dt / (attack_ms / 1000.0))
-        alpha_release = np.exp(-dt / (release_ms / 1000.0))
-
-        current_env = 0.0
-
-        # Abs signal for detection
-        abs_signal = np.abs(signal)
-
-        # Envelope follower
-        # Handle stereo signal (num_samples will be size of array, but if stereo, shape is (2, N))
-        # If stereo, we should link channels or process separately.
-        # Linking is better for kick (avoid stereo image shift).
-        # We take max of abs(L, R) for detection.
-
-        is_stereo = False
-        if abs_signal.ndim == 2:
-            is_stereo = True
-            abs_signal_mono = np.max(abs_signal, axis=0)
-            length = abs_signal.shape[1]
-            envelope = np.zeros(length)
-        else:
-            abs_signal_mono = abs_signal
-            length = len(abs_signal)
-            envelope = np.zeros(length)
-
-        for i in range(length):
-            in_val = abs_signal_mono[i]
-            if in_val > current_env:
-                current_env = alpha_attack * current_env + (1 - alpha_attack) * in_val
-            else:
-                current_env = alpha_release * current_env + (1 - alpha_release) * in_val
-            envelope[i] = current_env
-
-        # Calculate gain
-        # If envelope > threshold, apply ratio
-
-        # We work in linear domain or log?
-        # Let's use log for ratio calculation
-
-        env_db = 20 * np.log10(envelope + 1e-9)
-
-        # Gain reduction in dB
-        # gain_db = (threshold - env) * (1 - 1/ratio) if env > threshold else 0
-        # Wait.
-        # Target = Threshold + (Input - Threshold) / Ratio
-        # Reduction = Target - Input = (1/Ratio - 1) * (Input - Threshold)
-
-        gr_db = np.zeros(length)
-        mask = env_db > threshold_db
-        gr_db[mask] = (env_db[mask] - threshold_db) * (1.0/ratio - 1.0)
-
-        # Convert back to linear gain
-        gr_linear = 10 ** (gr_db / 20.0)
-
-        if is_stereo:
-            # Broadcast to (2, N)
-            compressed = signal * gr_linear
-        else:
-            compressed = signal * gr_linear
-
-        # Makeup gain to peak at original level or -0.1dB
-        # Let's normalize to peak of input or just 0dB?
-        # Kick should be loud.
-        max_val = np.max(np.abs(compressed))
-        if max_val > 0:
-            compressed = compressed / max_val * 0.95 # -0.5dB
-
-        return compressed
-
-    def _design_peaking_eq(self, freq, gain_db, Q=1.0):
-        # RBJ Cookbook Peaking EQ
-        A = 10 ** (gain_db / 40.0)
-        w0 = 2 * np.pi * freq / self.sample_rate
-        alpha = np.sin(w0) / (2 * Q)
-        cos_w0 = np.cos(w0)
-
-        b0 = 1 + alpha * A
-        b1 = -2 * cos_w0
-        b2 = 1 - alpha * A
-        a0 = 1 + alpha / A
-        a1 = -2 * cos_w0
-        a2 = 1 - alpha / A
-
-        return np.array([b0, b1, b2]) / a0, np.array([a0, a1, a2]) / a0
-
-    def apply_eq(self, signal):
-        """
-        Step 6: EQ Design
-        Cut < 30Hz
-        Boost 60-80Hz
-        Dip 200-400Hz
-        Boost 3-5kHz
-        """
-        from scipy.signal import butter, lfilter
-
-        # 1. High-pass > 30Hz
-        b_hp, a_hp = butter(2, 30.0 / (0.5 * self.sample_rate), btype='high')
-        signal = lfilter(b_hp, a_hp, signal)
-
-        # 2. Boost 70Hz (+2dB)
-        b_peak1, a_peak1 = self._design_peaking_eq(70.0, 2.0, Q=2.0)
-        signal = lfilter(b_peak1, a_peak1, signal)
-
-        # 3. Dip 300Hz (-3dB)
-        b_dip, a_dip = self._design_peaking_eq(300.0, -3.0, Q=1.0)
-        signal = lfilter(b_dip, a_dip, signal)
-
-        # 4. Boost 4000Hz (+2dB) -> Euphoria Style: Boost Highs more!
-        b_pres, a_pres = self._design_peaking_eq(4000.0, 3.5, Q=1.0)
-        signal = lfilter(b_pres, a_pres, signal)
-
-        return signal
-
-    def apply_reverb(self, signal, amount=0.3):
-        """
-        Simple Reverb/Delay Simulation for "Euphoria" feel.
-        Uses a comb filter or delay network.
-        """
-        if amount <= 0.0:
-            return signal
-
-        # Create a simple delay line
-        delay_ms = 40.0 # Short room/plate
-        feedback = 0.4
-
-        delay_samples = int(delay_ms * self.sample_rate / 1000.0)
-        output = np.copy(signal)
-
-        # Add delay
-        # This is a very crude FIR/IIR mix
-        # Let's just add a delayed version with decay
-
-        wet_signal = np.zeros_like(signal)
-        wet_signal[delay_samples:] = signal[:-delay_samples] * feedback
-
-        # Add a second tap
-        delay_samples2 = int(delay_ms * 1.5 * self.sample_rate / 1000.0)
-        if delay_samples2 < len(signal):
-            wet_signal[delay_samples2:] += signal[:-delay_samples2] * (feedback * 0.7)
-
-        # Mix
-        return signal * (1.0 - amount * 0.5) + wet_signal * amount
-
-    def apply_delay(self, signal, amount=0.3, time_ms=250.0):
-        """
-        Simple Stereo Ping-Pong Delay.
-        """
-        if amount <= 0.0:
-            return signal
-
-        delay_samples = int(time_ms * self.sample_rate / 1000.0)
-        feedback = 0.5
-
-        # Create stereo-ish effect by slightly offsetting or just summing
-        # For mono signal, let's just do a simple feedback delay
-
-        wet_signal = np.zeros_like(signal)
-        wet_signal[delay_samples:] = signal[:-delay_samples] * feedback
-
-        # Add a second tap
-        delay_samples2 = int(time_ms * 1.5 * self.sample_rate / 1000.0)
-        if delay_samples2 < len(signal):
-            wet_signal[delay_samples2:] += signal[:-delay_samples2] * (feedback * 0.5)
-
-        return signal * (1.0 - amount * 0.3) + wet_signal * amount
-
     def generate_bassline(self, freq=55.0, length_beats=4, bpm=138.0):
         """
         Generates a simple offbeat trance bass loop.
@@ -487,26 +290,30 @@ class TranceKickGenerator:
 
         # 3. Apply Effects Chain
         # Saturation (benefit most from oversampling)
-        processed = self.apply_saturation(mix, drive_db=drive_db)
+        processed = apply_saturation(mix, drive_db=drive_db)
 
         # Reverb
-        processed = self.apply_reverb(processed, amount=reverb_amount)
+        processed = apply_reverb(processed, self.sample_rate, amount=reverb_amount)
 
         # Delay
-        processed = self.apply_delay(processed, amount=delay_amount)
+        processed = apply_delay(processed, self.sample_rate, amount=delay_amount)
 
         # Compression
-        processed = self.apply_compression(processed, threshold_db=-12.0, ratio=4.0, attack_ms=3.0, release_ms=150.0)
+        processed = apply_compression(processed, self.sample_rate, threshold_db=-12.0, ratio=4.0, attack_ms=3.0, release_ms=150.0)
 
         # EQ
-        processed = self.apply_eq(processed)
+        processed = apply_eq(processed, self.sample_rate)
 
         # Downsample if needed
         if oversample > 1:
             # Simple decimation with low-pass filter to prevent aliasing
             from scipy.signal import decimate
             # decimate applies a low-pass filter (chebyshev type I) and downsamples
-            processed = decimate(processed, oversample, ftype='fir', zero_phase=True)
+            # Handle stereo decimation
+            if processed.ndim == 2:
+                processed = decimate(processed, oversample, axis=1, ftype='fir', zero_phase=True)
+            else:
+                processed = decimate(processed, oversample, ftype='fir', zero_phase=True)
 
             # Restore original rate state
             self.sample_rate = original_rate
@@ -516,7 +323,7 @@ class TranceKickGenerator:
 
     def _finalize_generation(self, processed, generate_bass, bass_freq, bpm, sc_depth):
         # Final Limiting
-        processed = self.apply_limiter(processed)
+        processed = apply_limiter(processed)
 
         # Bassline Generation (Optional)
         if generate_bass:
@@ -575,30 +382,6 @@ class TranceKickGenerator:
             return mix_loop
 
         return processed
-
-    def apply_limiter(self, signal, ceiling_db=-0.1):
-        """
-        Simple Lookahead Limiter.
-        Hard clips peaks but manages gain to avoid distortion.
-        """
-        ceiling = 10 ** (ceiling_db / 20.0)
-
-        # In a real DSP, we'd use lookahead gain reduction.
-        # Here we just normalize to ceiling for safety.
-        # But if we want the "limiter sound", we should clip and then smooth?
-        # Let's do simple hard clip then normalize.
-
-        # Hard clip at ceiling? No that's distortion.
-        # Just normalize peak to ceiling.
-
-        max_val = np.max(np.abs(signal))
-        if max_val > ceiling:
-            signal = signal / max_val * ceiling
-
-        return signal
-
-        # This block was redundant/duplicate from previous merge attempts and is now replaced by _finalize_generation
-        pass
 
     def save(self, filename, audio_data):
         # Convert float32 to int16 PCM
