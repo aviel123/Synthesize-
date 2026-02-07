@@ -45,6 +45,28 @@ class KickGeneratorGUI:
         # Reverb
         self.create_slider(controls_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb")
 
+        # Delay
+        self.create_slider(controls_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay")
+
+        # Bassline & Sidechain Frame
+        bass_frame = ttk.LabelFrame(main_frame, text="Bassline & Sidechain (VST/DAW Integration)", padding="10")
+        bass_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+
+        # Checkbox for Bassline
+        self.bass_var = tk.BooleanVar(value=False)
+        bass_chk = ttk.Checkbutton(bass_frame, text="Generate Bassline Loop (138 BPM)", variable=self.bass_var)
+        bass_chk.pack(anchor=tk.W)
+
+        # Bass Freq
+        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq")
+
+        # Sidechain Depth
+        self.create_slider(bass_frame, "Sidechain Depth", 0.0, 1.0, 0.8, "sc_depth")
+
+        # Export Trigger Button
+        trigger_btn = ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)", command=self.export_trigger)
+        trigger_btn.pack(pady=5)
+
         # File Output Frame
         file_frame = ttk.Frame(main_frame)
         file_frame.pack(fill=tk.X, pady=20)
@@ -101,6 +123,13 @@ class KickGeneratorGUI:
             click_decay = self.click_decay_var.get()
             drive = self.drive_var.get()
             reverb = self.reverb_var.get()
+            delay = self.delay_var.get()
+
+            # Bassline params
+            generate_bass = self.bass_var.get()
+            bass_freq = self.bass_freq_var.get()
+            sc_depth = self.sc_depth_var.get()
+
             filename = self.filename_var.get()
 
             if not filename.endswith('.wav'):
@@ -115,7 +144,11 @@ class KickGeneratorGUI:
                 click_level=click_level,
                 click_decay_ms=click_decay,
                 drive_db=drive,
-                reverb_amount=reverb
+                reverb_amount=reverb,
+                delay_amount=delay,
+                generate_bass=generate_bass,
+                bass_freq=bass_freq,
+                sc_depth=sc_depth
             )
             generator.save(filename, audio)
 
@@ -124,6 +157,14 @@ class KickGeneratorGUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
             self.status_var.set("Error generating kick.")
+
+    def export_trigger(self):
+        try:
+            generator = TranceKickGenerator()
+            generator.save_sidechain_trigger("sidechain_trigger.wav")
+            messagebox.showinfo("Success", "Exported sidechain_trigger.wav")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
 if __name__ == "__main__":
     root = tk.Tk()

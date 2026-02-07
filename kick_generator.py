@@ -316,7 +316,95 @@ class TranceKickGenerator:
         # Mix
         return signal * (1.0 - amount * 0.5) + wet_signal * amount
 
-    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0):
+    def apply_delay(self, signal, amount=0.3, time_ms=250.0):
+        """
+        Simple Stereo Ping-Pong Delay.
+        """
+        if amount <= 0.0:
+            return signal
+
+        delay_samples = int(time_ms * self.sample_rate / 1000.0)
+        feedback = 0.5
+
+        # Create stereo-ish effect by slightly offsetting or just summing
+        # For mono signal, let's just do a simple feedback delay
+
+        wet_signal = np.zeros_like(signal)
+        wet_signal[delay_samples:] = signal[:-delay_samples] * feedback
+
+        # Add a second tap
+        delay_samples2 = int(time_ms * 1.5 * self.sample_rate / 1000.0)
+        if delay_samples2 < len(signal):
+            wet_signal[delay_samples2:] += signal[:-delay_samples2] * (feedback * 0.5)
+
+        return signal * (1.0 - amount * 0.3) + wet_signal * amount
+
+    def generate_bassline(self, freq=55.0, length_beats=4, bpm=138.0):
+        """
+        Generates a simple offbeat trance bass loop.
+        Sawtooth wave.
+        """
+        beat_duration = 60.0 / bpm
+        total_duration = length_beats * beat_duration
+        num_samples = int(self.sample_rate * total_duration)
+        t = np.linspace(0, total_duration, num_samples, endpoint=False)
+
+        # Sawtooth wave
+        # Use simple additive synthesis or just modulo
+        phase = 2 * np.pi * freq * t
+        bass_signal = (phase % (2 * np.pi)) / np.pi - 1.0
+
+        # Filter (Low-pass)
+        from scipy.signal import butter, lfilter
+        b, a = butter(2, 400.0 / (0.5 * self.sample_rate), btype='low')
+        bass_signal = lfilter(b, a, bass_signal)
+
+        return bass_signal
+
+    def apply_sidechain(self, signal, bpm=138.0, depth=0.8, release_ms=100.0):
+        """
+        Applies volume ducking (sidechain compression) triggered on every beat.
+        """
+        if depth <= 0.0:
+            return signal
+
+        beat_duration = 60.0 / bpm
+        samples_per_beat = int(beat_duration * self.sample_rate)
+
+        # Create ducking envelope for one beat
+        # Starts at 1-depth, rises to 1.0 over release_ms
+        env_beat = np.ones(samples_per_beat)
+
+        release_samples = int(release_ms * self.sample_rate / 1000.0)
+        if release_samples > samples_per_beat:
+            release_samples = samples_per_beat
+
+        # Linear or exponential rise
+        # Let's do exponential rise
+        t_rel = np.linspace(0, 1, release_samples)
+        curve = 1.0 - np.exp(-5.0 * t_rel) # Fast rise
+
+        # Scale curve: 0 -> 1 becomes (1-depth) -> 1
+        ducking_curve = (1.0 - depth) + (depth * curve)
+
+        env_beat[:release_samples] = ducking_curve
+
+        # Tile envelope to match signal length
+        num_beats = int(np.ceil(len(signal) / samples_per_beat))
+        full_env = np.tile(env_beat, num_beats)[:len(signal)]
+
+        return signal * full_env
+
+    def save_sidechain_trigger(self, filename="sidechain_trigger.wav"):
+        """
+        Exports a short click track for sidechain key input in DAWs.
+        """
+        duration = 0.05 # 50ms click
+        t = np.linspace(0, duration, int(self.sample_rate * duration), endpoint=False)
+        click = np.sin(2 * np.pi * 1000.0 * t) * np.exp(-t * 100.0)
+        self.save(filename, click)
+
+    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0, delay_amount=0.0, generate_bass=False, bass_freq=55.0, sc_depth=0.8):
         # 1. Generate Layers
         punch = self.generate_punch()
         body = self.generate_body()
@@ -339,6 +427,9 @@ class TranceKickGenerator:
         # sometimes it's before. Let's put it before compression to smash the reverb tail up.
         processed = self.apply_reverb(processed, amount=reverb_amount)
 
+        # Delay (FX)
+        processed = self.apply_delay(processed, amount=delay_amount)
+
         # Compression to tighten and bring out transient
         processed = self.apply_compression(processed, threshold_db=-12.0, ratio=4.0, attack_ms=3.0, release_ms=150.0)
 
@@ -349,6 +440,53 @@ class TranceKickGenerator:
         max_val = np.max(np.abs(processed))
         if max_val > 0:
             processed = processed / max_val * 0.95
+
+        # Bassline Generation (Optional)
+        if generate_bass:
+            # Generate bass loop
+            # Calculate length to match kick duration or beats?
+            # Kick duration is usually short (0.5s), but loop needs beats.
+            # Let's assume we tile the kick or just return a longer loop containing the kick on beat 1?
+            # Usually users want the kick sound, so maybe "generate bass" just appends a sidechained bass tail?
+            # Or better: Create a 4-beat loop with Kick on 1, 2, 3, 4 and Bass offbeat.
+
+            bpm = 138.0
+            beat_len = 60.0 / bpm
+            samples_beat = int(beat_len * self.sample_rate)
+
+            # Create 1 bar loop
+            one_bar_samples = samples_beat * 4
+            loop_kick = np.zeros(one_bar_samples)
+
+            # Place kick on beats
+            kick_len = len(processed)
+            for i in range(4):
+                start = i * samples_beat
+                end = start + kick_len
+                if end > one_bar_samples: end = one_bar_samples
+                loop_kick[start:end] += processed[:end-start]
+
+            # Generate bass
+            bass = self.generate_bassline(freq=bass_freq, length_beats=4, bpm=bpm)
+
+            # Sidechain Bass
+            bass_sc = self.apply_sidechain(bass, bpm=bpm, depth=sc_depth, release_ms=150.0)
+
+            # Ensure lengths match
+            min_len = min(len(loop_kick), len(bass_sc))
+            loop_kick = loop_kick[:min_len]
+            bass_sc = bass_sc[:min_len]
+
+            # Mix
+            # Bass usually lower volume
+            mix_loop = loop_kick + bass_sc * 0.6
+
+            # Normalize loop
+            max_loop = np.max(np.abs(mix_loop))
+            if max_loop > 0:
+                mix_loop = mix_loop / max_loop * 0.95
+
+            return mix_loop
 
         return processed
 
@@ -365,9 +503,28 @@ if __name__ == "__main__":
     parser.add_argument("--click-decay", type=float, default=10.0, help="Click/Noise Decay in ms (default: 10.0)")
     parser.add_argument("--drive", type=float, default=4.5, help="Saturation Drive in dB (default: 4.5)")
     parser.add_argument("--reverb", type=float, default=0.0, help="Reverb Amount 0.0-1.0 (default: 0.0)")
+    parser.add_argument("--delay", type=float, default=0.0, help="Delay Amount 0.0-1.0 (default: 0.0)")
+    parser.add_argument("--bass", action="store_true", help="Generate Bassline Loop")
+    parser.add_argument("--bass-freq", type=float, default=55.0, help="Bass Frequency (default: 55.0)")
+    parser.add_argument("--sc-depth", type=float, default=0.8, help="Sidechain Depth 0.0-1.0 (default: 0.8)")
+    parser.add_argument("--export-trigger", action="store_true", help="Export sidechain trigger file")
     args = parser.parse_args()
 
     generator = TranceKickGenerator(duration=args.duration)
-    audio = generator.generate(click_level=args.click_level, click_decay_ms=args.click_decay, drive_db=args.drive, reverb_amount=args.reverb)
+
+    if args.export_trigger:
+        generator.save_sidechain_trigger("sidechain_trigger.wav")
+        print("Exported sidechain_trigger.wav")
+
+    audio = generator.generate(
+        click_level=args.click_level,
+        click_decay_ms=args.click_decay,
+        drive_db=args.drive,
+        reverb_amount=args.reverb,
+        delay_amount=args.delay,
+        generate_bass=args.bass,
+        bass_freq=args.bass_freq,
+        sc_depth=args.sc_depth
+    )
     generator.save(args.output, audio)
-    print(f"Generated trance kick to {args.output}")
+    print(f"Generated trance kick (or loop) to {args.output}")
