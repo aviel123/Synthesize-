@@ -4,6 +4,7 @@ import os
 from gui.kick_tab import KickTab
 from gui.clap_tab import ClapTab
 from gui.combo_tab import ComboTab
+from gui.smoke_tab import SmokeTab
 from gui.visualizers import WaveformVisualizer
 
 class MainWindow:
@@ -53,6 +54,10 @@ class MainWindow:
         # Clap Tab
         self.clap_tab = ClapTab(self.notebook, self)
         self.notebook.add(self.clap_tab, text="Clap Generator")
+
+        # Smoke Tab
+        self.smoke_tab = SmokeTab(self.notebook, self)
+        self.notebook.add(self.smoke_tab, text="Smoke / Noise")
 
         # Combo/Pattern Tab
         self.combo_tab = ComboTab(self.notebook, self)

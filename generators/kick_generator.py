@@ -9,6 +9,7 @@ from effects.reverb import apply_reverb
 from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
+from generators.advanced_noise_generator import AdvancedNoiseGenerator
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -261,7 +262,7 @@ class TranceKickGenerator:
         click = np.sin(2 * np.pi * 1000.0 * t) * np.exp(-t * 100.0)
         self.save(filename, click)
 
-    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0, delay_amount=0.0, generate_bass=False, bass_freq=55.0, sc_depth=0.8, oversample=1, click_width=0.0, phase_deg=0.0):
+    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0, delay_amount=0.0, generate_bass=False, bass_freq=55.0, sc_depth=0.8, oversample=1, click_width=0.0, phase_deg=0.0, smoke_params=None):
         """
         Generate the kick.
         oversample: 1 (Standard) or 2 (High Quality). Runs processing at 2x sample rate.
@@ -277,16 +278,62 @@ class TranceKickGenerator:
         body = self.generate_body(phase_deg=phase_deg)
         click = self.generate_click(level=click_level, decay_ms=click_decay_ms, width=click_width)
 
+        # Smoke Layer
+        smoke_layer = None
+        if smoke_params and smoke_params.get("enabled", False):
+            try:
+                noise_gen = AdvancedNoiseGenerator(self.sample_rate)
+                # Generate base smoke
+                smoke = noise_gen.smoke_noise(
+                    duration=self.duration,
+                    density=smoke_params.get("density", 60.0) / 100.0,
+                    character=smoke_params.get("character", "soft"),
+                    hp_freq=smoke_params.get("hp_freq", 6000.0),
+                    lp_freq=smoke_params.get("lp_freq", 16000.0)
+                )
+
+                # Apply envelope
+                env = noise_gen.create_smoke_envelope(
+                    duration=self.duration,
+                    start_delay_ms=smoke_params.get("delay", 15.0),
+                    fade_in_ms=smoke_params.get("fade_in", 120.0),
+                    fade_out_ms=smoke_params.get("fade_out", 350.0)
+                )
+                smoke = smoke * env
+
+                # Apply Level
+                level_db = smoke_params.get("level", -12.0)
+                gain = 10 ** (level_db / 20.0)
+                smoke = smoke * gain
+
+                # Apply Stereo Width
+                width = smoke_params.get("width", 85.0) / 100.0
+                smoke_layer = apply_stereo_width(smoke, width)
+
+            except Exception as e:
+                print(f"Error generating smoke layer: {e}")
+
         # 2. Mix
-        # Handle stereo mixing if click is stereo
+        # Handle stereo mixing if click or smoke is stereo
         is_stereo = False
-        if click.ndim == 2:
+        if click.ndim == 2 or (smoke_layer is not None and smoke_layer.ndim == 2):
             is_stereo = True
             # Expand punch/body to stereo
-            punch = np.vstack((punch, punch))
-            body = np.vstack((body, body))
+            if punch.ndim == 1: punch = np.vstack((punch, punch))
+            if body.ndim == 1: body = np.vstack((body, body))
+            if click.ndim == 1: click = np.vstack((click, click)) # Should be handled by gen but strictly ensuring
 
         mix = (punch * 0.7) + (body * 0.8) + (click * 0.5)
+
+        if smoke_layer is not None:
+            # Ensure smoke matches mix dimensions
+            if is_stereo and smoke_layer.ndim == 1:
+                smoke_layer = np.vstack((smoke_layer, smoke_layer))
+
+            # If mix is mono but smoke is stereo, mix is already promoted above?
+            # Yes, if smoke_layer was stereo, is_stereo is True, so mix components promoted.
+
+            mix = mix + smoke_layer
 
         # 3. Apply Effects Chain
         # Saturation (benefit most from oversampling)

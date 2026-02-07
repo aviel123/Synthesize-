@@ -123,6 +123,11 @@ class KickTab(ttk.Frame):
             if not filename.endswith('.wav'):
                 filename += '.wav'
 
+            # Get smoke params from SmokeTab if available
+            smoke_params = None
+            if hasattr(self.main_window, 'smoke_tab'):
+                smoke_params = self.main_window.smoke_tab.get_params()
+
             self.main_window.status_var.set("Generating Kick...")
             self.update_idletasks()
 
@@ -139,7 +144,8 @@ class KickTab(ttk.Frame):
                 sc_depth=sc_depth,
                 oversample=oversample,
                 click_width=click_width,
-                phase_deg=phase
+                phase_deg=phase,
+                smoke_params=smoke_params
             )
             generator.save(filename, audio)
 
