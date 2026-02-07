@@ -8,7 +8,7 @@ class TranceKickGenerator:
         self.duration = duration
         self.num_samples = int(sample_rate * duration)
 
-    def generate_punch(self):
+    def generate_punch(self, phase_deg=0.0):
         """
         Step 1: Kick Frequency Base (Punch)
         Sine wave starting high and dropping fast.
@@ -48,7 +48,9 @@ class TranceKickGenerator:
         # Generate phase by integrating frequency
         phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
 
-        signal = np.sin(phase)
+        # Add start phase offset
+        phase_offset = phase_deg * np.pi / 180.0
+        signal = np.sin(phase + phase_offset)
 
         # Amplitude Envelope for the punch
         # The prompt doesn't strictly specify amplitude envelope for the punch layer specifically,
@@ -72,7 +74,7 @@ class TranceKickGenerator:
 
         return signal * amp_env
 
-    def generate_body(self):
+    def generate_body(self, phase_deg=0.0):
         """
         Step 2: Kick Body
         Sine wave at 60-80Hz for depth.
@@ -84,7 +86,8 @@ class TranceKickGenerator:
         t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
 
         # Signal
-        signal = np.sin(2 * np.pi * body_freq * t)
+        phase_offset = phase_deg * np.pi / 180.0
+        signal = np.sin(2 * np.pi * body_freq * t + phase_offset)
 
         # Amplitude Envelope
         # Attack is 0, so start at 1.0
@@ -109,24 +112,56 @@ class TranceKickGenerator:
 
         return signal * amp_env
 
-    def generate_click(self, level=1.0, decay_ms=10.0):
+    def generate_click(self, level=1.0, decay_ms=10.0, width=0.0):
         """
         Step 3: Click/Transient (Modified for Euphoria - More Noise)
         White Noise short burst.
         Filter: High-pass @ 2kHz+.
         Envelope: Attack 0ms, Decay 5-15ms (Adjustable).
+        width: 0.0 (Mono) to 1.0 (Full Stereo Width) or more.
         """
         from scipy.signal import butter, lfilter
 
-        # Generate white noise
-        noise = np.random.uniform(-1, 1, self.num_samples)
+        # Generate white noise (Stereo if width > 0)
+        # Actually generate mono first, then stereoize?
+        # Or generate two uncorrelated noise sources
+
+        if width > 0.001:
+            # Stereo Noise
+            noise_L = np.random.uniform(-1, 1, self.num_samples)
+            noise_R = np.random.uniform(-1, 1, self.num_samples)
+
+            # Mix towards mono based on width inverse?
+            # Actually, standard is: Width 0 = L+R/2 (Mono), Width 1 = L, R uncorrelated
+            # Let's just interpolate between Mono (L=R=Noise1) and Stereo (L=Noise1, R=Noise2)
+
+            # Better approach for controlled width:
+            # Mid = Noise1
+            # Side = Noise2 * width
+            # L = M + S, R = M - S
+
+            mid = np.random.uniform(-1, 1, self.num_samples)
+            side = np.random.uniform(-1, 1, self.num_samples) * width
+
+            noise_L = mid + side
+            noise_R = mid - side
+
+            # Normalize approx
+            noise = np.vstack((noise_L, noise_R)) # Shape (2, N)
+        else:
+            noise = np.random.uniform(-1, 1, self.num_samples)
+            # 1D array
 
         # High-pass filter at 2500Hz
         cutoff = 2500
         nyquist = 0.5 * self.sample_rate
         normal_cutoff = cutoff / nyquist
         b, a = butter(2, normal_cutoff, btype='high', analog=False)
-        filtered_noise = lfilter(b, a, noise)
+
+        if noise.ndim == 2:
+            filtered_noise = lfilter(b, a, noise, axis=1)
+        else:
+            filtered_noise = lfilter(b, a, noise)
 
         # Envelope: Decay adjustable
         decay_time = decay_ms / 1000.0
@@ -201,9 +236,24 @@ class TranceKickGenerator:
         abs_signal = np.abs(signal)
 
         # Envelope follower
-        envelope = np.zeros(num_samples)
-        for i in range(num_samples):
-            in_val = abs_signal[i]
+        # Handle stereo signal (num_samples will be size of array, but if stereo, shape is (2, N))
+        # If stereo, we should link channels or process separately.
+        # Linking is better for kick (avoid stereo image shift).
+        # We take max of abs(L, R) for detection.
+
+        is_stereo = False
+        if abs_signal.ndim == 2:
+            is_stereo = True
+            abs_signal_mono = np.max(abs_signal, axis=0)
+            length = abs_signal.shape[1]
+            envelope = np.zeros(length)
+        else:
+            abs_signal_mono = abs_signal
+            length = len(abs_signal)
+            envelope = np.zeros(length)
+
+        for i in range(length):
+            in_val = abs_signal_mono[i]
             if in_val > current_env:
                 current_env = alpha_attack * current_env + (1 - alpha_attack) * in_val
             else:
@@ -224,14 +274,18 @@ class TranceKickGenerator:
         # Target = Threshold + (Input - Threshold) / Ratio
         # Reduction = Target - Input = (1/Ratio - 1) * (Input - Threshold)
 
-        gr_db = np.zeros(num_samples)
+        gr_db = np.zeros(length)
         mask = env_db > threshold_db
         gr_db[mask] = (env_db[mask] - threshold_db) * (1.0/ratio - 1.0)
 
         # Convert back to linear gain
         gr_linear = 10 ** (gr_db / 20.0)
 
-        compressed = signal * gr_linear
+        if is_stereo:
+            # Broadcast to (2, N)
+            compressed = signal * gr_linear
+        else:
+            compressed = signal * gr_linear
 
         # Makeup gain to peak at original level or -0.1dB
         # Let's normalize to peak of input or just 0dB?
@@ -404,67 +458,92 @@ class TranceKickGenerator:
         click = np.sin(2 * np.pi * 1000.0 * t) * np.exp(-t * 100.0)
         self.save(filename, click)
 
-    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0, delay_amount=0.0, generate_bass=False, bass_freq=55.0, sc_depth=0.8):
+    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0, delay_amount=0.0, generate_bass=False, bass_freq=55.0, sc_depth=0.8, oversample=1, click_width=0.0, phase_deg=0.0):
+        """
+        Generate the kick.
+        oversample: 1 (Standard) or 2 (High Quality). Runs processing at 2x sample rate.
+        """
+        original_rate = self.sample_rate
+
+        if oversample > 1:
+            self.sample_rate = original_rate * oversample
+            self.num_samples = int(self.sample_rate * self.duration)
+
         # 1. Generate Layers
-        punch = self.generate_punch()
-        body = self.generate_body()
-        click = self.generate_click(level=click_level, decay_ms=click_decay_ms)
+        punch = self.generate_punch(phase_deg=phase_deg)
+        body = self.generate_body(phase_deg=phase_deg)
+        click = self.generate_click(level=click_level, decay_ms=click_decay_ms, width=click_width)
 
         # 2. Mix
-        # Adjust levels based on typical trance kick balance
-        # Punch provides the initial thud
-        # Body provides the low end tail
-        # Click provides the top end snap
-        # Increased click mix slightly for "more noise" capability
-        mix = (punch * 0.7) + (body * 0.8) + (click * 0.5) # Default click higher, scalable by level
+        # Handle stereo mixing if click is stereo
+        is_stereo = False
+        if click.ndim == 2:
+            is_stereo = True
+            # Expand punch/body to stereo
+            punch = np.vstack((punch, punch))
+            body = np.vstack((body, body))
+
+        mix = (punch * 0.7) + (body * 0.8) + (click * 0.5)
 
         # 3. Apply Effects Chain
-        # Saturation to glue and add harmonics
+        # Saturation (benefit most from oversampling)
         processed = self.apply_saturation(mix, drive_db=drive_db)
 
-        # Reverb (Euphoria Style) - Applied before compression?
-        # Usually reverb is after compression, but for a "big room" kick effect where the tail is compressed up,
-        # sometimes it's before. Let's put it before compression to smash the reverb tail up.
+        # Reverb
         processed = self.apply_reverb(processed, amount=reverb_amount)
 
-        # Delay (FX)
+        # Delay
         processed = self.apply_delay(processed, amount=delay_amount)
 
-        # Compression to tighten and bring out transient
+        # Compression
         processed = self.apply_compression(processed, threshold_db=-12.0, ratio=4.0, attack_ms=3.0, release_ms=150.0)
 
-        # EQ to sculpt the final tone
+        # EQ
         processed = self.apply_eq(processed)
 
-        # Final Normalization / Limiting
-        max_val = np.max(np.abs(processed))
-        if max_val > 0:
-            processed = processed / max_val * 0.95
+        # Downsample if needed
+        if oversample > 1:
+            # Simple decimation with low-pass filter to prevent aliasing
+            from scipy.signal import decimate
+            # decimate applies a low-pass filter (chebyshev type I) and downsamples
+            processed = decimate(processed, oversample, ftype='fir', zero_phase=True)
+
+            # Restore original rate state
+            self.sample_rate = original_rate
+            self.num_samples = int(self.sample_rate * self.duration)
+
+        return self._finalize_generation(processed, generate_bass, bass_freq, bpm=138.0, sc_depth=sc_depth)
+
+    def _finalize_generation(self, processed, generate_bass, bass_freq, bpm, sc_depth):
+        # Final Limiting
+        processed = self.apply_limiter(processed)
 
         # Bassline Generation (Optional)
         if generate_bass:
             # Generate bass loop
-            # Calculate length to match kick duration or beats?
-            # Kick duration is usually short (0.5s), but loop needs beats.
-            # Let's assume we tile the kick or just return a longer loop containing the kick on beat 1?
-            # Usually users want the kick sound, so maybe "generate bass" just appends a sidechained bass tail?
-            # Or better: Create a 4-beat loop with Kick on 1, 2, 3, 4 and Bass offbeat.
-
-            bpm = 138.0
             beat_len = 60.0 / bpm
             samples_beat = int(beat_len * self.sample_rate)
 
             # Create 1 bar loop
             one_bar_samples = samples_beat * 4
-            loop_kick = np.zeros(one_bar_samples)
+
+            if processed.ndim == 2:
+                 loop_kick = np.zeros((2, one_bar_samples))
+            else:
+                 loop_kick = np.zeros(one_bar_samples)
 
             # Place kick on beats
-            kick_len = len(processed)
+            kick_len = processed.shape[-1] if processed.ndim == 2 else len(processed)
+
             for i in range(4):
                 start = i * samples_beat
                 end = start + kick_len
                 if end > one_bar_samples: end = one_bar_samples
-                loop_kick[start:end] += processed[:end-start]
+
+                if processed.ndim == 2:
+                     loop_kick[:, start:end] += processed[:, :end-start]
+                else:
+                     loop_kick[start:end] += processed[:end-start]
 
             # Generate bass
             bass = self.generate_bassline(freq=bass_freq, length_beats=4, bpm=bpm)
@@ -472,13 +551,20 @@ class TranceKickGenerator:
             # Sidechain Bass
             bass_sc = self.apply_sidechain(bass, bpm=bpm, depth=sc_depth, release_ms=150.0)
 
-            # Ensure lengths match
-            min_len = min(len(loop_kick), len(bass_sc))
-            loop_kick = loop_kick[:min_len]
-            bass_sc = bass_sc[:min_len]
-
             # Mix
-            # Bass usually lower volume
+            # Ensure stereo bass if kick is stereo
+            if processed.ndim == 2 and bass_sc.ndim == 1:
+                bass_sc = np.vstack((bass_sc, bass_sc))
+
+            # Truncate
+            length = min(loop_kick.shape[-1], bass_sc.shape[-1])
+            if processed.ndim == 2:
+                 loop_kick = loop_kick[:, :length]
+                 bass_sc = bass_sc[:, :length]
+            else:
+                 loop_kick = loop_kick[:length]
+                 bass_sc = bass_sc[:length]
+
             mix_loop = loop_kick + bass_sc * 0.6
 
             # Normalize loop
@@ -490,8 +576,36 @@ class TranceKickGenerator:
 
         return processed
 
+    def apply_limiter(self, signal, ceiling_db=-0.1):
+        """
+        Simple Lookahead Limiter.
+        Hard clips peaks but manages gain to avoid distortion.
+        """
+        ceiling = 10 ** (ceiling_db / 20.0)
+
+        # In a real DSP, we'd use lookahead gain reduction.
+        # Here we just normalize to ceiling for safety.
+        # But if we want the "limiter sound", we should clip and then smooth?
+        # Let's do simple hard clip then normalize.
+
+        # Hard clip at ceiling? No that's distortion.
+        # Just normalize peak to ceiling.
+
+        max_val = np.max(np.abs(signal))
+        if max_val > ceiling:
+            signal = signal / max_val * ceiling
+
+        return signal
+
+        # This block was redundant/duplicate from previous merge attempts and is now replaced by _finalize_generation
+        pass
+
     def save(self, filename, audio_data):
         # Convert float32 to int16 PCM
+        # Transpose if stereo (scipy wavfile expects (N, 2))
+        if audio_data.ndim == 2:
+            audio_data = audio_data.T
+
         scaled = np.int16(audio_data * 32767)
         wavfile.write(filename, self.sample_rate, scaled)
 

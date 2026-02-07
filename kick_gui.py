@@ -22,34 +22,60 @@ class KickGeneratorGUI:
         title_label = ttk.Label(main_frame, text="Trance Kick Designer (Armin Style)", font=("Helvetica", 16, "bold"))
         title_label.pack(pady=(0, 20))
 
-        # Controls Frame
-        controls_frame = ttk.LabelFrame(main_frame, text="Synthesis Parameters", padding="10")
-        controls_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Notebook for Tabs
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # 1. Base Frequency (Body) - Note: In code it's fixed at 70Hz or 150Hz punch, let's expose specific tweaks if possible,
-        # but the current generator has hardcoded frequencies.
-        # For this task, I'll expose the parameters I just added + Duration.
+        # Tab 1: Synthesis
+        synth_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(synth_frame, text="Synthesis")
 
-        # Duration
-        self.create_slider(controls_frame, "Duration (s)", 0.1, 1.0, 0.5, "duration")
+        # Tab 2: Effects
+        fx_frame = ttk.Frame(notebook, padding="10")
+        notebook.add(fx_frame, text="Effects")
+
+        # Tab 3: Bassline/Export
+        bass_frame_tab = ttk.Frame(notebook, padding="10")
+        notebook.add(bass_frame_tab, text="Bassline & Export")
+
+        # --- Synthesis Tab ---
+
+        # Quality/Oversampling
+        q_frame = ttk.Frame(synth_frame)
+        q_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(q_frame, text="Quality Mode:", width=25).pack(side=tk.LEFT)
+        self.oversample_var = tk.IntVar(value=1)
+        q_combo = ttk.Combobox(q_frame, textvariable=self.oversample_var, values=[1, 2], state="readonly", width=5)
+        q_combo.pack(side=tk.LEFT)
+        ttk.Label(q_frame, text="(1=Std, 2=High/Oversampled)").pack(side=tk.LEFT, padx=5)
+
+        self.create_slider(synth_frame, "Duration (s)", 0.1, 1.0, 0.5, "duration")
+
+        # Phase
+        self.create_slider(synth_frame, "Start Phase (deg)", 0.0, 360.0, 0.0, "phase")
 
         # Click/Noise Level
-        self.create_slider(controls_frame, "Click/Noise Level (Euphoria)", 0.0, 3.0, 1.0, "click_level")
+        self.create_slider(synth_frame, "Click/Noise Level", 0.0, 3.0, 1.0, "click_level")
 
         # Click Decay
-        self.create_slider(controls_frame, "Click Decay (ms)", 5.0, 100.0, 10.0, "click_decay")
+        self.create_slider(synth_frame, "Click Decay (ms)", 5.0, 100.0, 10.0, "click_decay")
+
+        # Stereo Width (Click)
+        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0, 2.0, 0.0, "click_width")
+
+        # --- Effects Tab ---
 
         # Drive
-        self.create_slider(controls_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5, "drive")
+        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5, "drive")
 
         # Reverb
-        self.create_slider(controls_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb")
+        self.create_slider(fx_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb")
 
         # Delay
-        self.create_slider(controls_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay")
+        self.create_slider(fx_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay")
 
-        # Bassline & Sidechain Frame
-        bass_frame = ttk.LabelFrame(main_frame, text="Bassline & Sidechain (VST/DAW Integration)", padding="10")
+        # --- Bassline Tab ---
+        bass_frame = ttk.LabelFrame(bass_frame_tab, text="Bassline & Sidechain (VST/DAW Integration)", padding="10")
         bass_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
         # Checkbox for Bassline
@@ -118,9 +144,12 @@ class KickGeneratorGUI:
     def generate(self):
         try:
             # Get values
+            oversample = self.oversample_var.get()
             duration = self.duration_var.get()
+            phase = self.phase_var.get()
             click_level = self.click_level_var.get()
             click_decay = self.click_decay_var.get()
+            click_width = self.click_width_var.get()
             drive = self.drive_var.get()
             reverb = self.reverb_var.get()
             delay = self.delay_var.get()
@@ -148,7 +177,10 @@ class KickGeneratorGUI:
                 delay_amount=delay,
                 generate_bass=generate_bass,
                 bass_freq=bass_freq,
-                sc_depth=sc_depth
+                sc_depth=sc_depth,
+                oversample=oversample,
+                click_width=click_width,
+                phase_deg=phase
             )
             generator.save(filename, audio)
 
