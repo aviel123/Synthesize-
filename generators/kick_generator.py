@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.io import wavfile
 import argparse
+from scipy.signal import butter, lfilter, decimate
 
 from effects.saturation import apply_saturation
 from effects.compression import apply_compression
@@ -8,7 +9,6 @@ from effects.eq import apply_eq
 from effects.reverb import apply_reverb
 from effects.delay import apply_delay
 from effects.limiter import apply_limiter
-from effects.stereo import apply_stereo_width
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -45,13 +45,17 @@ class TranceKickGenerator:
         freq_envelope = np.zeros_like(t)
 
         # Active region for the sweep
-        active_indices = t < punch_decay
-        t_active = t[active_indices]
+        # Use slicing for performance
+        decay_samples = int(punch_decay * self.sample_rate)
+        if decay_samples > self.num_samples:
+            decay_samples = self.num_samples
+
+        t_active = t[:decay_samples]
 
         # Exponential interpolation
         # f(t) = start_freq * (base_freq/start_freq)^(t/decay)
-        freq_envelope[active_indices] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
-        freq_envelope[~active_indices] = base_freq
+        freq_envelope[:decay_samples] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
+        freq_envelope[decay_samples:] = base_freq
 
         # Generate phase by integrating frequency
         phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
@@ -112,11 +116,10 @@ class TranceKickGenerator:
         # e^-7 is approx 0.001 (-60dB).
         k = 7.0 / decay_time
 
-        active_indices = t < decay_time
-        t_active = t[active_indices]
+        t_active = t[:decay_samples]
 
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        amp_env[:decay_samples] = np.exp(-k * t_active)
+        # Rest is zero
 
         return signal * amp_env
 
@@ -128,8 +131,6 @@ class TranceKickGenerator:
         Envelope: Attack 0ms, Decay 5-15ms (Adjustable).
         width: 0.0 (Mono) to 1.0 (Full Stereo Width) or more.
         """
-        from scipy.signal import butter, lfilter
-
         # Generate white noise (Stereo if width > 0)
         # Actually generate mono first, then stereoize?
         # Or generate two uncorrelated noise sources
@@ -188,11 +189,10 @@ class TranceKickGenerator:
         # Let's keep exponential but scale amplitude by level.
 
         k = 7.0 / decay_time
-        active_indices = t < decay_time
-        t_active = t[active_indices]
+        t_active = t[:decay_samples]
 
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        amp_env[:decay_samples] = np.exp(-k * t_active)
+        # Rest is zero
 
         return filtered_noise * amp_env * level
 
@@ -212,7 +212,6 @@ class TranceKickGenerator:
         bass_signal = (phase % (2 * np.pi)) / np.pi - 1.0
 
         # Filter (Low-pass)
-        from scipy.signal import butter, lfilter
         b, a = butter(2, 400.0 / (0.5 * self.sample_rate), btype='low')
         bass_signal = lfilter(b, a, bass_signal)
 
@@ -279,9 +278,7 @@ class TranceKickGenerator:
 
         # 2. Mix
         # Handle stereo mixing if click is stereo
-        is_stereo = False
         if click.ndim == 2:
-            is_stereo = True
             # Expand punch/body to stereo
             punch = np.vstack((punch, punch))
             body = np.vstack((body, body))
@@ -307,7 +304,6 @@ class TranceKickGenerator:
         # Downsample if needed
         if oversample > 1:
             # Simple decimation with low-pass filter to prevent aliasing
-            from scipy.signal import decimate
             # decimate applies a low-pass filter (chebyshev type I) and downsamples
             # Handle stereo decimation
             if processed.ndim == 2:
