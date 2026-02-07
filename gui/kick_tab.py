@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 from generators.kick_generator import TranceKickGenerator
+from utils.tooltip import ToolTip
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -37,30 +38,57 @@ class KickTab(ttk.Frame):
         q_combo.pack(side=tk.LEFT)
         ttk.Label(q_frame, text="(1=Std, 2=High/Oversampled)").pack(side=tk.LEFT, padx=5)
 
-        self.create_slider(synth_frame, "Duration (s)", 0.1, 1.0, 0.5, "duration")
-        self.create_slider(synth_frame, "Start Phase (deg)", 0.0, 360.0, 0.0, "phase")
-        self.create_slider(synth_frame, "Click/Noise Level", 0.0, 3.0, 1.0, "click_level")
-        self.create_slider(synth_frame, "Click Decay (ms)", 5.0, 100.0, 10.0, "click_decay")
-        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0, 2.0, 0.0, "click_width")
+        self.create_slider(synth_frame, "Duration (s)", 0.1, 1.0, 0.5,
+                           "duration", "Length of the kick in seconds")
+        self.create_slider(synth_frame, "Start Phase (deg)", 0.0, 360.0, 0.0,
+                           "phase",
+                           "Adjusts the starting phase alignment of the "
+                           "sub/punch (0-360)")
+        self.create_slider(synth_frame, "Click/Noise Level", 0.0, 3.0, 1.0,
+                           "click_level",
+                           "Volume of the high-frequency noise layer")
+        self.create_slider(synth_frame, "Click Decay (ms)", 5.0, 100.0, 10.0,
+                           "click_decay",
+                           "Length of the noise envelope in milliseconds")
+        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0, 2.0, 0.0,
+                           "click_width",
+                           "Stereo width of the noise layer "
+                           "(0=Mono, >1=Wide)")
 
         # --- Effects Tab ---
-        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5, "drive")
-        self.create_slider(fx_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb")
-        self.create_slider(fx_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay")
+        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5,
+                           "drive", "Amount of soft-clipping distortion")
+        self.create_slider(fx_frame, "Reverb Amount", 0.0, 1.0, 0.0,
+                           "reverb", "Mix level of the reverb tail")
+        self.create_slider(fx_frame, "Delay Amount", 0.0, 1.0, 0.0,
+                           "delay", "Mix level of the stereo delay")
 
         # --- Bassline Tab ---
-        bass_frame = ttk.LabelFrame(bass_frame_tab, text="Bassline & Sidechain (VST/DAW Integration)", padding="10")
+        bass_frame = ttk.LabelFrame(
+            bass_frame_tab,
+            text="Bassline & Sidechain (VST/DAW Integration)",
+            padding="10"
+        )
         bass_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
         # Checkbox for Bassline
         self.vars["bass"] = tk.BooleanVar(value=False)
-        bass_chk = ttk.Checkbutton(bass_frame, text="Generate Bassline Loop (138 BPM)", variable=self.vars["bass"])
+        bass_chk = ttk.Checkbutton(
+            bass_frame,
+            text="Generate Bassline Loop (138 BPM)",
+            variable=self.vars["bass"]
+        )
         bass_chk.pack(anchor=tk.W)
 
         # Bass Freq
-        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq")
+        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0,
+                           55.0, "bass_freq",
+                           "Pitch of the accompanying bassline")
         # Sidechain Depth
-        self.create_slider(bass_frame, "Sidechain Depth", 0.0, 1.0, 0.8, "sc_depth")
+        self.create_slider(bass_frame, "Sidechain Depth", 0.0, 1.0, 0.8,
+                           "sc_depth",
+                           "Amount of volume reduction on the bassline "
+                           "when the kick hits")
 
         # Export Trigger Button
         trigger_btn = ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)", command=self.export_trigger)
@@ -72,12 +100,16 @@ class KickTab(ttk.Frame):
         generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
         generate_btn.pack(side=tk.LEFT, padx=5)
 
-    def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
+    def create_slider(self, parent, label_text, min_val, max_val, default_val,
+                      var_name, tooltip_text=None):
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, pady=5)
 
         lbl = ttk.Label(frame, text=label_text, width=25)
         lbl.pack(side=tk.LEFT)
+
+        if tooltip_text:
+            ToolTip(lbl, tooltip_text)
 
         var = tk.DoubleVar(value=default_val)
         scale = ttk.Scale(frame, from_=min_val, to=max_val, orient=tk.HORIZONTAL, variable=var, length=200)
