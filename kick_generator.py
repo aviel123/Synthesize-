@@ -109,12 +109,12 @@ class TranceKickGenerator:
 
         return signal * amp_env
 
-    def generate_click(self):
+    def generate_click(self, level=1.0, decay_ms=10.0):
         """
-        Step 3: Click/Transient
+        Step 3: Click/Transient (Modified for Euphoria - More Noise)
         White Noise short burst.
         Filter: High-pass @ 2kHz+.
-        Envelope: Attack 0ms, Decay 5-15ms.
+        Envelope: Attack 0ms, Decay 5-15ms (Adjustable).
         """
         from scipy.signal import butter, lfilter
 
@@ -128,8 +128,8 @@ class TranceKickGenerator:
         b, a = butter(2, normal_cutoff, btype='high', analog=False)
         filtered_noise = lfilter(b, a, noise)
 
-        # Envelope: Very short decay (10ms)
-        decay_time = 0.010 # 10ms
+        # Envelope: Decay adjustable
+        decay_time = decay_ms / 1000.0
 
         t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
         amp_env = np.zeros_like(t)
@@ -139,6 +139,11 @@ class TranceKickGenerator:
             decay_samples = self.num_samples
 
         # Exponential decay for crispness
+        # For Euphoria, maybe a slightly longer tail?
+        # k = 7.0 / decay_time -> standard -60dB point.
+        # If user wants "more noise", we can make the decay curve shallower?
+        # Let's keep exponential but scale amplitude by level.
+
         k = 7.0 / decay_time
         active_indices = t < decay_time
         t_active = t[active_indices]
@@ -146,7 +151,7 @@ class TranceKickGenerator:
         amp_env[active_indices] = np.exp(-k * t_active)
         amp_env[~active_indices] = 0.0
 
-        return filtered_noise * amp_env
+        return filtered_noise * amp_env * level
 
     def apply_saturation(self, signal, drive_db=4.5):
         """
@@ -275,28 +280,64 @@ class TranceKickGenerator:
         b_dip, a_dip = self._design_peaking_eq(300.0, -3.0, Q=1.0)
         signal = lfilter(b_dip, a_dip, signal)
 
-        # 4. Boost 4000Hz (+2dB)
-        b_pres, a_pres = self._design_peaking_eq(4000.0, 2.0, Q=1.0)
+        # 4. Boost 4000Hz (+2dB) -> Euphoria Style: Boost Highs more!
+        b_pres, a_pres = self._design_peaking_eq(4000.0, 3.5, Q=1.0)
         signal = lfilter(b_pres, a_pres, signal)
 
         return signal
 
-    def generate(self):
+    def apply_reverb(self, signal, amount=0.3):
+        """
+        Simple Reverb/Delay Simulation for "Euphoria" feel.
+        Uses a comb filter or delay network.
+        """
+        if amount <= 0.0:
+            return signal
+
+        # Create a simple delay line
+        delay_ms = 40.0 # Short room/plate
+        feedback = 0.4
+
+        delay_samples = int(delay_ms * self.sample_rate / 1000.0)
+        output = np.copy(signal)
+
+        # Add delay
+        # This is a very crude FIR/IIR mix
+        # Let's just add a delayed version with decay
+
+        wet_signal = np.zeros_like(signal)
+        wet_signal[delay_samples:] = signal[:-delay_samples] * feedback
+
+        # Add a second tap
+        delay_samples2 = int(delay_ms * 1.5 * self.sample_rate / 1000.0)
+        if delay_samples2 < len(signal):
+            wet_signal[delay_samples2:] += signal[:-delay_samples2] * (feedback * 0.7)
+
+        # Mix
+        return signal * (1.0 - amount * 0.5) + wet_signal * amount
+
+    def generate(self, click_level=1.0, click_decay_ms=10.0, drive_db=4.5, reverb_amount=0.0):
         # 1. Generate Layers
         punch = self.generate_punch()
         body = self.generate_body()
-        click = self.generate_click()
+        click = self.generate_click(level=click_level, decay_ms=click_decay_ms)
 
         # 2. Mix
         # Adjust levels based on typical trance kick balance
         # Punch provides the initial thud
         # Body provides the low end tail
         # Click provides the top end snap
-        mix = (punch * 0.7) + (body * 0.8) + (click * 0.15)
+        # Increased click mix slightly for "more noise" capability
+        mix = (punch * 0.7) + (body * 0.8) + (click * 0.5) # Default click higher, scalable by level
 
         # 3. Apply Effects Chain
         # Saturation to glue and add harmonics
-        processed = self.apply_saturation(mix, drive_db=4.0)
+        processed = self.apply_saturation(mix, drive_db=drive_db)
+
+        # Reverb (Euphoria Style) - Applied before compression?
+        # Usually reverb is after compression, but for a "big room" kick effect where the tail is compressed up,
+        # sometimes it's before. Let's put it before compression to smash the reverb tail up.
+        processed = self.apply_reverb(processed, amount=reverb_amount)
 
         # Compression to tighten and bring out transient
         processed = self.apply_compression(processed, threshold_db=-12.0, ratio=4.0, attack_ms=3.0, release_ms=150.0)
@@ -320,9 +361,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Trance Kick Generator in the style of Armin van Buuren")
     parser.add_argument("--duration", type=float, default=0.5, help="Duration of the kick in seconds")
     parser.add_argument("--output", type=str, default="trance_kick.wav", help="Output filename")
+    parser.add_argument("--click-level", type=float, default=1.0, help="Click/Noise Level (default: 1.0)")
+    parser.add_argument("--click-decay", type=float, default=10.0, help="Click/Noise Decay in ms (default: 10.0)")
+    parser.add_argument("--drive", type=float, default=4.5, help="Saturation Drive in dB (default: 4.5)")
+    parser.add_argument("--reverb", type=float, default=0.0, help="Reverb Amount 0.0-1.0 (default: 0.0)")
     args = parser.parse_args()
 
     generator = TranceKickGenerator(duration=args.duration)
-    audio = generator.generate()
+    audio = generator.generate(click_level=args.click_level, click_decay_ms=args.click_decay, drive_db=args.drive, reverb_amount=args.reverb)
     generator.save(args.output, audio)
     print(f"Generated trance kick to {args.output}")
