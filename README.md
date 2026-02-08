@@ -46,6 +46,14 @@ Here is a detailed breakdown of what the system does:
 
 ## Usage Guide
 
+### Installation
+First, install the required dependencies:
+```bash
+pip install numpy scipy
+# tkinter is usually included with Python, but if missing:
+# sudo apt-get install python3-tk (Ubuntu/Debian)
+```
+
 ### Running the GUI
 To open the visual interface:
 ```bash
