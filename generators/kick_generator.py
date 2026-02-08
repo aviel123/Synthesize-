@@ -35,24 +35,25 @@ class TranceKickGenerator:
         # We want the pitch to drop from start_freq to base_freq over punch_decay seconds
         # Using an exponential decay for pitch usually sounds best
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-
         # Pitch envelope: 1 at t=0, 0 at t=punch_decay (normalized)
         # But we want frequency.
         # Let's model frequency decay exponentially from start_freq to base_freq.
         # After punch_decay, it stays at base_freq (or fades out via amplitude envelope).
 
         # Create a frequency array
-        freq_envelope = np.zeros_like(t)
+        freq_envelope = np.full(self.num_samples, base_freq)
 
         # Active region for the sweep
-        active_indices = t < punch_decay
-        t_active = t[active_indices]
+        punch_samples = int(np.ceil(punch_decay * self.sample_rate))
+        if punch_samples > self.num_samples:
+            punch_samples = self.num_samples
+
+        # Create t only for the active region
+        t_active = np.arange(punch_samples) / self.sample_rate
 
         # Exponential interpolation
         # f(t) = start_freq * (base_freq/start_freq)^(t/decay)
-        freq_envelope[active_indices] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
-        freq_envelope[~active_indices] = base_freq
+        freq_envelope[:punch_samples] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
 
         # Generate phase by integrating frequency
         phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
@@ -68,7 +69,7 @@ class TranceKickGenerator:
         # I will apply a short amplitude decay to the punch layer so it doesn't drone on at 150Hz.
         # Let's say it follows the pitch envelope duration roughly.
 
-        amp_env = np.zeros_like(t)
+        amp_env = np.zeros(self.num_samples)
         # Linear decay for amplitude matching the pitch drop duration + a bit of release
         decay_samples = int(punch_decay * self.sample_rate)
         release_samples = int(0.01 * self.sample_rate) # 10ms release
@@ -102,8 +103,8 @@ class TranceKickGenerator:
         # Attack is 0, so start at 1.0
         # Decay to 0 over decay_time (exponentially)
 
-        amp_env = np.zeros_like(t)
-        decay_samples = int(decay_time * self.sample_rate)
+        amp_env = np.zeros(self.num_samples)
+        decay_samples = int(np.ceil(decay_time * self.sample_rate))
 
         if decay_samples > self.num_samples:
             decay_samples = self.num_samples
@@ -113,11 +114,8 @@ class TranceKickGenerator:
         # e^-7 is approx 0.001 (-60dB).
         k = 7.0 / decay_time
 
-        active_indices = t < decay_time
-        t_active = t[active_indices]
-
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        if decay_samples > 0:
+            amp_env[:decay_samples] = np.exp(-k * t[:decay_samples])
 
         return signal * amp_env
 
@@ -175,10 +173,9 @@ class TranceKickGenerator:
         # Envelope: Decay adjustable
         decay_time = decay_ms / 1000.0
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-        amp_env = np.zeros_like(t)
+        amp_env = np.zeros(self.num_samples)
 
-        decay_samples = int(decay_time * self.sample_rate)
+        decay_samples = int(np.ceil(decay_time * self.sample_rate))
         if decay_samples > self.num_samples:
             decay_samples = self.num_samples
 
@@ -189,11 +186,10 @@ class TranceKickGenerator:
         # Let's keep exponential but scale amplitude by level.
 
         k = 7.0 / decay_time
-        active_indices = t < decay_time
-        t_active = t[active_indices]
 
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        if decay_samples > 0:
+            t_active = np.arange(decay_samples) / self.sample_rate
+            amp_env[:decay_samples] = np.exp(-k * t_active)
 
         return filtered_noise * amp_env * level
 
