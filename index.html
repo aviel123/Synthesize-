@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trance Drum Designer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #d4d4d4;
+            padding: 20px;
+            direction: rtl;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #e8e8e8;
+            border: 2px solid #999;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .filename-section {
+            margin-bottom: 15px;
+        }
+
+        .filename-section label {
+            display: inline-block;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+
+        .filename-section input {
+            padding: 5px;
+            width: 250px;
+            border: 1px solid #999;
+            background: white;
+        }
+
+        .canvas-container {
+            background: #000;
+            border: 2px solid #666;
+            margin-bottom: 15px;
+            position: relative;
+            cursor: crosshair;
+            height: 250px;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            padding: 8px 15px;
+            background: #c0c0c0;
+            border: 1px solid #999;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            font-size: 14px;
+        }
+
+        .tab.active {
+            background: #e8e8e8;
+            border-bottom: 2px solid #e8e8e8;
+        }
+
+        .controls {
+            background: white;
+            border: 1px solid #999;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 15px;
+        }
+
+        .control-row label {
+            width: 150px;
+            font-size: 14px;
+        }
+
+        .control-row input[type="range"] {
+            flex: 1;
+            height: 6px;
+        }
+
+        .control-row .value {
+            width: 60px;
+            text-align: left;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(to bottom, #f0f0f0, #d0d0d0);
+            border: 1px solid #999;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: linear-gradient(to bottom, #fff, #e0e0e0);
+        }
+
+        button:active {
+            background: linear-gradient(to bottom, #d0d0d0, #f0f0f0);
+        }
+
+        .info-text {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">🎵 Euphoria Trance Drum Designer</div>
+
+        <div class="filename-section">
+            <label>שם קובץ פלט:</label>
+            <input type="text" id="filename" value="output.wav">
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="designCanvas"></canvas>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="clap">Clap Generator</div>
+            <div class="tab" data-tab="noise">Smoke / Noise</div>
+            <div class="tab" data-tab="pattern">Pattern/Combo</div>
+        </div>
+
+        <div class="controls">
+            <div class="control-row">
+                <label>משך זמן (שניות):</label>
+                <input type="range" id="duration" min="0.1" max="2" step="0.1" value="0.5">
+                <span class="value" id="durationValue">0.50</span>
+            </div>
+
+            <div class="control-row">
+                <label>רמת רעש:</label>
+                <input type="range" id="noise" min="0" max="100" step="1" value="30">
+                <span class="value" id="noiseValue">30</span>
+            </div>
+
+            <div class="control-row">
+                <label>דעיכה (ms):</label>
+                <input type="range" id="decay" min="1" max="100" step="1" value="10">
+                <span class="value" id="decayValue">10.00</span>
+            </div>
+
+            <div class="control-row">
+                <label>רוחב סטריאו:</label>
+                <input type="range" id="width" min="0" max="100" step="1" value="50">
+                <span class="value" id="widthValue">50</span>
+            </div>
+
+            <div class="button-group">
+                <button id="playBtn">▶ נגן צליל</button>
+                <button id="clearBtn">🗑 נקה עיצוב</button>
+                <button id="randomBtn">🎲 אקראי</button>
+                <button id="exportBtn">💾 ייצא</button>
+            </div>
+
+            <div class="info-text">
+                לחץ באזור השחור כדי ליצור נקודות ועצב את הצליל שלך | גרור נקודות לשינוי הצורה
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('designCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvasContainer');
+
+        // Set canvas size
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            drawWaveform();
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Points for the envelope
+        let points = [
+            { x: 0, y: 0.8 },
+            { x: 0.1, y: 0.2 },
+            { x: 0.3, y: 0.5 },
+            { x: 0.6, y: 0.7 },
+            { x: 1, y: 1 }
+        ];
+
+        let selectedPoint = null;
+        let isDragging = false;
+
+        // Draw the waveform
+        function drawWaveform() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid
+            ctx.strokeStyle = '#1a3a1a';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 10; i++) {
+                const x = (canvas.width / 10) * i;
+                const y = (canvas.height / 10) * i;
+
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Draw the envelope curve
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+
+            for (let i = 0; i < points.length; i++) {
+                const x = points[i].x * canvas.width;
+                const y = canvas.height - (points[i].y * canvas.height);
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+
+            // Draw points
+            points.forEach((point, index) => {
+                const x = point.x * canvas.width;
+                const y = canvas.height - (point.y * canvas.height);
+
+                ctx.fillStyle = selectedPoint === index ? '#ffff00' : '#00ff00';
+                ctx.beginPath();
+                ctx.arc(x, y, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // Draw center line
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+        }
+
+        // Mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) / canvas.width;
+            const mouseY = 1 - ((e.clientY - rect.top) / canvas.height);
+
+            // Check if clicking on existing point
+            selectedPoint = null;
+            for (let i = 0; i < points.length; i++) {
+                const dx = Math.abs(points[i].x - mouseX);
+                const dy = Math.abs(points[i].y - mouseY);
+                if (dx < 0.03 && dy < 0.05) {
+                    selectedPoint = i;
+                    isDragging = true;
+                    break;
+                }
+            }
+
+            // Add new point if not clicking on existing
+            if (selectedPoint === null) {
+                points.push({ x: mouseX, y: mouseY });
+                points.sort((a, b) => a.x - b.x);
+                drawWaveform();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging && selectedPoint !== null) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = Math.max(0, Math.min(1, (e.clientX - rect.left) / canvas.width));
+                const mouseY = Math.max(0, Math.min(1, 1 - ((e.clientY - rect.top) / canvas.height)));
+
+                points[selectedPoint].x = mouseX;
+                points[selectedPoint].y = mouseY;
+                points.sort((a, b) => a.x - b.x);
+                drawWaveform();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            selectedPoint = null;
+            drawWaveform();
+        });
+
+        // Control updates
+        document.getElementById('duration').addEventListener('input', (e) => {
+            document.getElementById('durationValue').textContent = parseFloat(e.target.value).toFixed(2);
+        });
+
+        document.getElementById('noise').addEventListener('input', (e) => {
+            document.getElementById('noiseValue').textContent = e.target.value;
+        });
+
+        document.getElementById('decay').addEventListener('input', (e) => {
+            document.getElementById('decayValue').textContent = parseFloat(e.target.value).toFixed(2);
+        });
+
+        document.getElementById('width').addEventListener('input', (e) => {
+            document.getElementById('widthValue').textContent = e.target.value;
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
+        });
+
+        // Button actions
+        document.getElementById('playBtn').addEventListener('click', () => {
+            alert('ניגון צליל... (דורש Web Audio API מלא להטמעה)');
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            points = [
+                { x: 0, y: 0.5 },
+                { x: 1, y: 0.5 }
+            ];
+            drawWaveform();
+        });
+
+        document.getElementById('randomBtn').addEventListener('click', () => {
+            const numPoints = Math.floor(Math.random() * 5) + 3;
+            points = [];
+            for (let i = 0; i < numPoints; i++) {
+                points.push({
+                    x: i / (numPoints - 1),
+                    y: Math.random()
+                });
+            }
+            drawWaveform();
+        });
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const filename = document.getElementById('filename').value;
+            alert(`ייצוא קובץ: ${filename}\n(דורש הטמעת ייצוא WAV מלא)`);
+        });
+
+        // Initial draw
+        drawWaveform();
+    </script>
+</body>
+</html>
