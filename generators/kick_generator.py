@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.io import wavfile
 import argparse
+import sys
 
 from effects.saturation import apply_saturation
 from effects.compression import apply_compression
@@ -10,6 +11,7 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.security import validate_filename
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -431,6 +433,9 @@ class TranceKickGenerator:
         return processed
 
     def save(self, filename, audio_data):
+        # Validate filename
+        validate_filename(filename)
+
         # Convert float32 to int16 PCM
         # Transpose if stereo (scipy wavfile expects (N, 2))
         if audio_data.ndim == 2:
@@ -470,5 +475,9 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+    try:
+        generator.save(args.output, audio)
+        print(f"Generated trance kick (or loop) to {args.output}")
+    except ValueError as e:
+        print(f"Error saving file: {e}")
+        sys.exit(1)
