@@ -10,6 +10,7 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.security import validate_filename
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -431,6 +432,7 @@ class TranceKickGenerator:
         return processed
 
     def save(self, filename, audio_data):
+        filename = validate_filename(filename)
         # Convert float32 to int16 PCM
         # Transpose if stereo (scipy wavfile expects (N, 2))
         if audio_data.ndim == 2:
