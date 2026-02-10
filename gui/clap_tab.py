@@ -3,6 +3,8 @@ from tkinter import ttk, messagebox
 import numpy as np
 from scipy.io import wavfile
 from generators.clap_generator import ClapGenerator
+from gui.tooltip import ToolTip
+
 
 class ClapTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -15,19 +17,39 @@ class ClapTab(ttk.Frame):
         frame = ttk.LabelFrame(self, text="Clap Parameters", padding="10")
         frame.pack(fill=tk.X, expand=True, pady=10)
 
-        self.create_slider(frame, "Transient Level", 0.0, 2.0, 1.0, "transient_level")
-        self.create_slider(frame, "Reflections (Count)", 1.0, 10.0, 5.0, "reflections") # int cast later
-        self.create_slider(frame, "Reflection Spacing (ms)", 1.0, 20.0, 8.0, "spacing")
-        self.create_slider(frame, "Tail Length (ms)", 10.0, 300.0, 100.0, "tail_length")
-        self.create_slider(frame, "Stereo Width", 0.0, 1.0, 0.5, "width")
+        self.create_slider(
+            frame, "Transient Level", 0.0, 2.0, 1.0, "transient_level",
+            "Volume of the initial snap/attack."
+        )
+        self.create_slider(
+            frame, "Reflections (Count)", 1.0, 10.0, 5.0, "reflections",
+            "Number of rapid echoes to simulate a handclap."
+        )
+        self.create_slider(
+            frame, "Reflection Spacing (ms)", 1.0, 20.0, 8.0, "spacing",
+            "Time interval between each reflection."
+        )
+        self.create_slider(
+            frame, "Tail Length (ms)", 10.0, 300.0, 100.0, "tail_length",
+            "Duration of the noise tail."
+        )
+        self.create_slider(
+            frame, "Stereo Width", 0.0, 1.0, 0.5, "width",
+            "Stereo widening effect amount."
+        )
 
         # Generate Button for this tab
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=10)
-        generate_btn = ttk.Button(btn_frame, text="Generate Clap", command=self.generate)
+        generate_btn = ttk.Button(
+            btn_frame, text="Generate Clap", command=self.generate
+        )
         generate_btn.pack(side=tk.LEFT, padx=5)
 
-    def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
+    def create_slider(
+        self, parent, label_text, min_val, max_val, default_val,
+        var_name, tooltip_text=None
+    ):
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, pady=5)
 
@@ -35,7 +57,10 @@ class ClapTab(ttk.Frame):
         lbl.pack(side=tk.LEFT)
 
         var = tk.DoubleVar(value=default_val)
-        scale = ttk.Scale(frame, from_=min_val, to=max_val, orient=tk.HORIZONTAL, variable=var, length=200)
+        scale = ttk.Scale(
+            frame, from_=min_val, to=max_val, orient=tk.HORIZONTAL,
+            variable=var, length=200
+        )
         scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         val_lbl = ttk.Label(frame, text=f"{default_val:.2f}", width=6)
@@ -46,6 +71,10 @@ class ClapTab(ttk.Frame):
         scale.config(command=update_label)
 
         self.vars[var_name] = var
+
+        if tooltip_text:
+            ToolTip(lbl, tooltip_text)
+            ToolTip(scale, tooltip_text)
 
     def generate(self):
         try:
