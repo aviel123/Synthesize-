@@ -4,6 +4,7 @@ import numpy as np
 from scipy.io import wavfile
 from generators.kick_generator import TranceKickGenerator
 from generators.clap_generator import ClapGenerator
+from utils.tooltip import ToolTip
 
 class ComboTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -23,9 +24,13 @@ class ComboTab(ttk.Frame):
         frame = ttk.LabelFrame(self, text="Pattern Settings", padding="10")
         frame.pack(fill=tk.X, expand=True, pady=10)
 
-        self.create_slider(frame, "Swing (%)", 0.0, 50.0, 0.0, "swing")
-        self.create_slider(frame, "Kick Volume", 0.0, 1.0, 0.9, "kick_vol")
-        self.create_slider(frame, "Clap Volume", 0.0, 1.0, 0.8, "clap_vol")
+        self.create_slider(frame, "Swing (%)", 0.0, 50.0, 0.0, "swing",
+                           "Percentage of swing/groove applied to "
+                           "offbeats")
+        self.create_slider(frame, "Kick Volume", 0.0, 1.0, 0.9, "kick_vol",
+                           "Mix level of the kick in the loop")
+        self.create_slider(frame, "Clap Volume", 0.0, 1.0, 0.8, "clap_vol",
+                           "Mix level of the clap in the loop")
 
         # Generate Button
         btn_frame = ttk.Frame(self)
@@ -33,12 +38,16 @@ class ComboTab(ttk.Frame):
         generate_btn = ttk.Button(btn_frame, text="Generate Combo Loop", command=self.generate)
         generate_btn.pack(side=tk.TOP, padx=5)
 
-    def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
+    def create_slider(self, parent, label_text, min_val, max_val, default_val,
+                      var_name, tooltip_text=None):
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, pady=5)
 
         lbl = ttk.Label(frame, text=label_text, width=25)
         lbl.pack(side=tk.LEFT)
+
+        if tooltip_text:
+            ToolTip(lbl, tooltip_text)
 
         var = tk.DoubleVar(value=default_val)
         scale = ttk.Scale(frame, from_=min_val, to=max_val, orient=tk.HORIZONTAL, variable=var, length=200)
