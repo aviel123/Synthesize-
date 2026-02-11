@@ -1,0 +1,4 @@
+## 2025-02-14 - Arbitrary File Write via Path Traversal
+**Vulnerability:** The application accepted user-provided filenames directly into `wavfile.write` without validation. This allowed path traversal (e.g., `../kick.wav`) and potentially arbitrary file overwrites.
+**Learning:** Desktop applications often assume user input is trusted, but strict confinement (preventing writes outside the intended directory) is a robust defense-in-depth measure. Balancing this with usability (e.g., allowing "Save As" to other folders) is challenging; here, a strict policy was chosen to prioritize security.
+**Prevention:** Implemented `utils.security.validate_filename` to enforce a whitelist of allowed characters (alphanumeric, parens, etc.) and explicitly reject path separators (`/`, `\`, `..`), ensuring all outputs are confined to the working directory.
