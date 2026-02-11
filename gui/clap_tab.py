@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import numpy as np
 from scipy.io import wavfile
 from generators.clap_generator import ClapGenerator
+from utils.security import validate_filename
 
 class ClapTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -65,6 +66,8 @@ class ClapTab(ttk.Frame):
 
             if not filename.endswith('.wav'):
                 filename += '.wav'
+
+            filename = validate_filename(filename)
 
             self.main_window.status_var.set("Generating Clap...")
             self.update_idletasks()
