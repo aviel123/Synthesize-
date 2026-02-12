@@ -1,7 +1,8 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import threading
+from tkinter import ttk, filedialog, messagebox  # noqa: F401
+import threading  # noqa: F401
 from generators.kick_generator import TranceKickGenerator
+from utils.security import validate_filename
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -120,8 +121,11 @@ class KickTab(ttk.Frame):
 
             filename = self.main_window.filename_var.get()
 
-            if not filename.endswith('.wav'):
-                filename += '.wav'
+            try:
+                filename = validate_filename(filename)
+            except ValueError as ve:
+                messagebox.showerror("Invalid Filename", str(ve))
+                return
 
             # Get smoke params from SmokeTab if available
             smoke_params = None

@@ -470,5 +470,11 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+    from utils.security import validate_filename
+    try:
+        output_file = validate_filename(args.output)
+        generator.save(output_file, audio)
+        print(f"Generated trance kick (or loop) to {output_file}")
+    except ValueError as e:
+        print(f"Error: {e}")
+        exit(1)
