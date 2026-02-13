@@ -31,57 +31,56 @@ class TranceKickGenerator:
         # Start frequency calculation: base * 2^(semitones/12)
         start_freq = base_freq * (2 ** (start_pitch_semitones / 12.0))
 
-        # Generate envelope for pitch
-        # We want the pitch to drop from start_freq to base_freq over punch_decay seconds
-        # Using an exponential decay for pitch usually sounds best
+        # Determine active length (Decay + Release)
+        decay_samples = int(punch_decay * self.sample_rate)
+        release_samples = int(0.01 * self.sample_rate)  # 10ms release
+        total_active_len = decay_samples + release_samples
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
+        if total_active_len > self.num_samples:
+            total_active_len = self.num_samples
 
-        # Pitch envelope: 1 at t=0, 0 at t=punch_decay (normalized)
-        # But we want frequency.
-        # Let's model frequency decay exponentially from start_freq to base_freq.
-        # After punch_decay, it stays at base_freq (or fades out via amplitude envelope).
+        # Optimization: Generate only for active duration
+        # We need 't' for the active part.
+        # Ensure 'dt' matches the full duration calculation: dt = duration / num_samples
+        dt = self.duration / self.num_samples
+        t_active = np.arange(total_active_len) * dt
 
-        # Create a frequency array
-        freq_envelope = np.zeros_like(t)
+        # Pitch Envelope
+        freq_envelope = np.full(total_active_len, base_freq)
 
-        # Active region for the sweep
-        active_indices = t < punch_decay
-        t_active = t[active_indices]
+        # Active region for the sweep (first decay_samples)
+        # Note: t_active[:decay_samples] corresponds to t < punch_decay
+        # (assuming integer division holds closely enough, which it does for standard rates)
+        t_sweep = t_active[:decay_samples]
 
         # Exponential interpolation
-        # f(t) = start_freq * (base_freq/start_freq)^(t/decay)
-        freq_envelope[active_indices] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
-        freq_envelope[~active_indices] = base_freq
+        freq_envelope[:decay_samples] = start_freq * ((base_freq / start_freq) ** (t_sweep / punch_decay))
 
-        # Generate phase by integrating frequency
+        # Generate phase
         phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
 
         # Add start phase offset
         phase_offset = phase_deg * np.pi / 180.0
         signal = np.sin(phase + phase_offset)
 
-        # Amplitude Envelope for the punch
-        # The prompt doesn't strictly specify amplitude envelope for the punch layer specifically,
-        # but implies it's short ("punch").
-        # Step 2 talks about Body Decay.
-        # I will apply a short amplitude decay to the punch layer so it doesn't drone on at 150Hz.
-        # Let's say it follows the pitch envelope duration roughly.
+        # Amplitude Envelope
+        amp_env = np.zeros(total_active_len)
+        amp_env[:decay_samples] = np.linspace(1.0, 0.5, decay_samples)
+        # Handle case where release is truncated
+        release_len = total_active_len - decay_samples
+        if release_len > 0:
+            amp_env[decay_samples:] = np.linspace(0.5, 0.0, release_len)
 
-        amp_env = np.zeros_like(t)
-        # Linear decay for amplitude matching the pitch drop duration + a bit of release
-        decay_samples = int(punch_decay * self.sample_rate)
-        release_samples = int(0.01 * self.sample_rate) # 10ms release
+        # Compute active signal
+        active_signal = signal * amp_env
 
-        total_len = decay_samples + release_samples
-        if total_len > self.num_samples:
-            total_len = self.num_samples
-
-        # 1.0 to 0.0
-        amp_env[:decay_samples] = np.linspace(1.0, 0.5, decay_samples) # Decay to half
-        amp_env[decay_samples:total_len] = np.linspace(0.5, 0.0, release_samples) # Quick release
-
-        return signal * amp_env
+        # Pad to full length if needed
+        if total_active_len < self.num_samples:
+            full_signal = np.zeros(self.num_samples)
+            full_signal[:total_active_len] = active_signal
+            return full_signal
+        else:
+            return active_signal
 
     def generate_body(self, phase_deg=0.0):
         """
