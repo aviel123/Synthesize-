@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.signal import butter, lfilter
+from utils.validators import InputValidator
 
 class AdvancedNoiseGenerator:
     """
@@ -8,6 +9,7 @@ class AdvancedNoiseGenerator:
     """
 
     def __init__(self, sample_rate=44100):
+        InputValidator.validate_audio_params(sample_rate=sample_rate)
         self.sr = sample_rate
 
     def _highpass_filter(self, data, cutoff):
@@ -41,6 +43,7 @@ class AdvancedNoiseGenerator:
         """
         Generates basic noise colors.
         """
+        InputValidator.validate_audio_params(duration=duration)
         num_samples = int(duration * self.sr)
 
         if noise_type == 'white':
@@ -99,6 +102,7 @@ class AdvancedNoiseGenerator:
         """
         Trance 'Smoke' Noise generator.
         """
+        InputValidator.validate_audio_params(duration=duration)
         num_samples = int(duration * self.sr)
 
         # Base: White Noise
@@ -152,6 +156,7 @@ class AdvancedNoiseGenerator:
         """
         Custom envelope for smoke layer.
         """
+        InputValidator.validate_audio_params(duration=duration)
         samples = int(duration * self.sr)
         envelope = np.zeros(samples)
 

@@ -10,9 +10,12 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.validators import InputValidator
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
+        InputValidator.validate_audio_params(duration=duration, sample_rate=sample_rate)
+
         self.sample_rate = sample_rate
         self.duration = duration
         self.num_samples = int(sample_rate * duration)
