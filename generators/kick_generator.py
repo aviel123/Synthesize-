@@ -35,7 +35,19 @@ class TranceKickGenerator:
         # We want the pitch to drop from start_freq to base_freq over punch_decay seconds
         # Using an exponential decay for pitch usually sounds best
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
+        # OPTIMIZATION: Only generate signal for the active duration
+        # Determine total active length (decay + release)
+        decay_samples = int(punch_decay * self.sample_rate)
+        release_samples = int(0.01 * self.sample_rate)  # 10ms release
+        total_len = decay_samples + release_samples
+
+        if total_len > self.num_samples:
+            total_len = self.num_samples
+
+        # Generate time array only for active duration
+        # Use arange * dt to match linspace precision
+        dt = self.duration / self.num_samples
+        t = np.arange(total_len) * dt
 
         # Pitch envelope: 1 at t=0, 0 at t=punch_decay (normalized)
         # But we want frequency.
@@ -43,7 +55,7 @@ class TranceKickGenerator:
         # After punch_decay, it stays at base_freq (or fades out via amplitude envelope).
 
         # Create a frequency array
-        freq_envelope = np.zeros_like(t)
+        freq_envelope = np.zeros(total_len)
 
         # Active region for the sweep
         active_indices = t < punch_decay
@@ -51,8 +63,13 @@ class TranceKickGenerator:
 
         # Exponential interpolation
         # f(t) = start_freq * (base_freq/start_freq)^(t/decay)
-        freq_envelope[active_indices] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
-        freq_envelope[~active_indices] = base_freq
+        ratio = base_freq / start_freq
+        power = t_active / punch_decay
+        freq_envelope[active_indices] = start_freq * (ratio ** power)
+
+        # Fill the rest with base freq
+        if len(t_active) < total_len:
+            freq_envelope[len(t_active):] = base_freq
 
         # Generate phase by integrating frequency
         phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
@@ -62,26 +79,25 @@ class TranceKickGenerator:
         signal = np.sin(phase + phase_offset)
 
         # Amplitude Envelope for the punch
-        # The prompt doesn't strictly specify amplitude envelope for the punch layer specifically,
-        # but implies it's short ("punch").
-        # Step 2 talks about Body Decay.
-        # I will apply a short amplitude decay to the punch layer so it doesn't drone on at 150Hz.
-        # Let's say it follows the pitch envelope duration roughly.
+        amp_env = np.zeros(total_len)
 
-        amp_env = np.zeros_like(t)
-        # Linear decay for amplitude matching the pitch drop duration + a bit of release
-        decay_samples = int(punch_decay * self.sample_rate)
-        release_samples = int(0.01 * self.sample_rate) # 10ms release
-
-        total_len = decay_samples + release_samples
-        if total_len > self.num_samples:
-            total_len = self.num_samples
-
+        # Linear decay matching pitch drop duration + release
         # 1.0 to 0.0
-        amp_env[:decay_samples] = np.linspace(1.0, 0.5, decay_samples) # Decay to half
-        amp_env[decay_samples:total_len] = np.linspace(0.5, 0.0, release_samples) # Quick release
+        # Check if decay_samples fits in total_len
+        actual_decay = min(decay_samples, total_len)
+        # Decay to half
+        amp_env[:actual_decay] = np.linspace(1.0, 0.5, actual_decay)
 
-        return signal * amp_env
+        remaining = total_len - actual_decay
+        if remaining > 0:
+            # Quick release
+            amp_env[actual_decay:] = np.linspace(0.5, 0.0, remaining)
+
+        # Zero-pad to full duration
+        full_signal = np.zeros(self.num_samples)
+        full_signal[:total_len] = signal * amp_env
+
+        return full_signal
 
     def generate_body(self, phase_deg=0.0):
         """
