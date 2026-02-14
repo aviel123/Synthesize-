@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.signal import butter, lfilter
 from effects.stereo import apply_stereo_width
+from utils.validators import InputValidator
 
 def apply_stereo_width(signal, width=0.0):
     """
@@ -37,6 +38,8 @@ def apply_stereo_width(signal, width=0.0):
 
 class ClapGenerator:
     def __init__(self, sample_rate=44100):
+        InputValidator.validate_audio_params(sample_rate=sample_rate)
+
         self.sample_rate = sample_rate
         self.duration = 0.5 # Default duration
         self.num_samples = int(sample_rate * self.duration)
