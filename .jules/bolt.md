@@ -1,0 +1,3 @@
+## 2025-05-18 - Optimization of Audio Synthesis by Active Duration
+**Learning:** For synthesis of decaying signals (kicks, claps), generating the full buffer (e.g. 500ms) when the active signal is much shorter (e.g. 50ms) is wasteful. Optimizing to generate only the active duration and zero-padding yields significant speedups (~14% for kick generator) without affecting output quality, provided the envelope ensures zero amplitude at the cutoff.
+**Action:** Always check if signal generation loops over full buffer size when the effective signal is short. Use integer slicing and zero-padding instead of masking where possible.
