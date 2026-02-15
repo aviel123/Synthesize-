@@ -10,9 +10,12 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.validators import InputValidator
+
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
+        InputValidator.validate_audio_params(duration, sample_rate)
         self.sample_rate = sample_rate
         self.duration = duration
         self.num_samples = int(sample_rate * duration)
@@ -431,6 +434,7 @@ class TranceKickGenerator:
         return processed
 
     def save(self, filename, audio_data):
+        filename = InputValidator.sanitize_filename(filename)
         # Convert float32 to int16 PCM
         # Transpose if stereo (scipy wavfile expects (N, 2))
         if audio_data.ndim == 2:
@@ -438,6 +442,7 @@ class TranceKickGenerator:
 
         scaled = np.int16(audio_data * 32767)
         wavfile.write(filename, self.sample_rate, scaled)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Trance Kick Generator in the style of Armin van Buuren")
