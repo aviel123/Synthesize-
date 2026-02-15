@@ -35,53 +35,58 @@ class TranceKickGenerator:
         # We want the pitch to drop from start_freq to base_freq over punch_decay seconds
         # Using an exponential decay for pitch usually sounds best
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-
-        # Pitch envelope: 1 at t=0, 0 at t=punch_decay (normalized)
-        # But we want frequency.
-        # Let's model frequency decay exponentially from start_freq to base_freq.
-        # After punch_decay, it stays at base_freq (or fades out via amplitude envelope).
-
-        # Create a frequency array
-        freq_envelope = np.zeros_like(t)
-
-        # Active region for the sweep
-        active_indices = t < punch_decay
-        t_active = t[active_indices]
-
-        # Exponential interpolation
-        # f(t) = start_freq * (base_freq/start_freq)^(t/decay)
-        freq_envelope[active_indices] = start_freq * ((base_freq / start_freq) ** (t_active / punch_decay))
-        freq_envelope[~active_indices] = base_freq
-
-        # Generate phase by integrating frequency
-        phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
-
-        # Add start phase offset
-        phase_offset = phase_deg * np.pi / 180.0
-        signal = np.sin(phase + phase_offset)
-
-        # Amplitude Envelope for the punch
-        # The prompt doesn't strictly specify amplitude envelope for the punch layer specifically,
-        # but implies it's short ("punch").
-        # Step 2 talks about Body Decay.
-        # I will apply a short amplitude decay to the punch layer so it doesn't drone on at 150Hz.
-        # Let's say it follows the pitch envelope duration roughly.
-
-        amp_env = np.zeros_like(t)
-        # Linear decay for amplitude matching the pitch drop duration + a bit of release
+        # Optimization: Only generate signal for the active duration
         decay_samples = int(punch_decay * self.sample_rate)
-        release_samples = int(0.01 * self.sample_rate) # 10ms release
+        # 10ms release
+        release_samples = int(0.01 * self.sample_rate)
 
         total_len = decay_samples + release_samples
         if total_len > self.num_samples:
             total_len = self.num_samples
 
-        # 1.0 to 0.0
-        amp_env[:decay_samples] = np.linspace(1.0, 0.5, decay_samples) # Decay to half
-        amp_env[decay_samples:total_len] = np.linspace(0.5, 0.0, release_samples) # Quick release
+        # Generate time array only for active duration
+        dt = self.duration / self.num_samples
+        t_active = np.arange(total_len) * dt
 
-        return signal * amp_env
+        # Pitch envelope
+        freq_envelope = np.full(total_len, base_freq)
+
+        # Active region for the sweep
+        active_indices = t_active < punch_decay
+        t_sweep = t_active[active_indices]
+
+        # Exponential interpolation
+        freq_envelope[active_indices] = start_freq * (
+            (base_freq / start_freq) ** (t_sweep / punch_decay)
+        )
+
+        # Generate phase
+        phase = 2 * np.pi * np.cumsum(freq_envelope) / self.sample_rate
+        phase_offset = phase_deg * np.pi / 180.0
+        signal_active = np.sin(phase + phase_offset)
+
+        # Amplitude Envelope
+        amp_env_active = np.zeros(total_len)
+
+        # 1.0 to 0.0
+        n_decay = min(decay_samples, total_len)
+        amp_env_active[:n_decay] = np.linspace(1.0, 0.5, n_decay)
+
+        n_release = total_len - n_decay
+        if n_release > 0:
+            # Note: We must ensure we generate exactly n_release points
+            amp_env_active[n_decay:] = np.linspace(0.5, 0.0, n_release)
+
+        # Apply envelope
+        active_output = signal_active * amp_env_active
+
+        # Zero-pad to full length
+        if total_len < self.num_samples:
+            output = np.zeros(self.num_samples)
+            output[:total_len] = active_output
+            return output
+
+        return active_output
 
     def generate_body(self, phase_deg=0.0):
         """
@@ -92,34 +97,39 @@ class TranceKickGenerator:
         body_freq = 70.0  # ~F2
         decay_time = 0.300 # 300ms
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-
-        # Signal
-        phase_offset = phase_deg * np.pi / 180.0
-        signal = np.sin(2 * np.pi * body_freq * t + phase_offset)
-
-        # Amplitude Envelope
-        # Attack is 0, so start at 1.0
-        # Decay to 0 over decay_time (exponentially)
-
-        amp_env = np.zeros_like(t)
+        # Optimization: Only generate signal for active duration (decay_time)
         decay_samples = int(decay_time * self.sample_rate)
 
         if decay_samples > self.num_samples:
             decay_samples = self.num_samples
+
+        dt = self.duration / self.num_samples
+        t_active = np.arange(decay_samples) * dt
+
+        # Signal
+        phase_offset = phase_deg * np.pi / 180.0
+        signal_active = np.sin(2 * np.pi * body_freq * t_active + phase_offset)
+
+        # Amplitude Envelope
+        # Attack is 0, so start at 1.0
+        # Decay to 0 over decay_time (exponentially)
 
         # Exponential decay: e^(-k * t)
         # We want envelope to drop to near zero (~-60dB) by decay_time.
         # e^-7 is approx 0.001 (-60dB).
         k = 7.0 / decay_time
 
-        active_indices = t < decay_time
-        t_active = t[active_indices]
+        amp_env_active = np.exp(-k * t_active)
 
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        active_output = signal_active * amp_env_active
 
-        return signal * amp_env
+        # Zero-pad to full length
+        if decay_samples < self.num_samples:
+            output = np.zeros(self.num_samples)
+            output[:decay_samples] = active_output
+            return output
+
+        return active_output
 
     def generate_click(self, level=1.0, decay_ms=10.0, width=0.0):
         """
@@ -131,14 +141,22 @@ class TranceKickGenerator:
         """
         from scipy.signal import butter, lfilter
 
+        # Envelope: Decay adjustable
+        decay_time = decay_ms / 1000.0
+
+        # Optimization: Only generate signal for active duration
+        decay_samples = int(decay_time * self.sample_rate)
+        if decay_samples > self.num_samples:
+            decay_samples = self.num_samples
+
         # Generate white noise (Stereo if width > 0)
         # Actually generate mono first, then stereoize?
         # Or generate two uncorrelated noise sources
 
         if width > 0.001:
             # Stereo Noise
-            noise_L = np.random.uniform(-1, 1, self.num_samples)
-            noise_R = np.random.uniform(-1, 1, self.num_samples)
+            noise_L = np.random.uniform(-1, 1, decay_samples)
+            noise_R = np.random.uniform(-1, 1, decay_samples)
 
             # Mix towards mono based on width inverse?
             # Actually, standard is: Width 0 = L+R/2 (Mono), Width 1 = L, R uncorrelated
@@ -149,16 +167,16 @@ class TranceKickGenerator:
             # Side = Noise2 * width
             # L = M + S, R = M - S
 
-            mid = np.random.uniform(-1, 1, self.num_samples)
-            side = np.random.uniform(-1, 1, self.num_samples) * width
+            mid = np.random.uniform(-1, 1, decay_samples)
+            side = np.random.uniform(-1, 1, decay_samples) * width
 
             noise_L = mid + side
             noise_R = mid - side
 
             # Normalize approx
-            noise = np.vstack((noise_L, noise_R)) # Shape (2, N)
+            noise = np.vstack((noise_L, noise_R))  # Shape (2, N)
         else:
-            noise = np.random.uniform(-1, 1, self.num_samples)
+            noise = np.random.uniform(-1, 1, decay_samples)
             # 1D array
 
         # High-pass filter at 2500Hz
@@ -172,15 +190,10 @@ class TranceKickGenerator:
         else:
             filtered_noise = lfilter(b, a, noise)
 
-        # Envelope: Decay adjustable
-        decay_time = decay_ms / 1000.0
+        dt = self.duration / self.num_samples
+        t_active = np.arange(decay_samples) * dt
 
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-        amp_env = np.zeros_like(t)
-
-        decay_samples = int(decay_time * self.sample_rate)
-        if decay_samples > self.num_samples:
-            decay_samples = self.num_samples
+        amp_env_active = np.zeros(decay_samples)
 
         # Exponential decay for crispness
         # For Euphoria, maybe a slightly longer tail?
@@ -189,13 +202,22 @@ class TranceKickGenerator:
         # Let's keep exponential but scale amplitude by level.
 
         k = 7.0 / decay_time
-        active_indices = t < decay_time
-        t_active = t[active_indices]
 
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        amp_env_active = np.exp(-k * t_active)
 
-        return filtered_noise * amp_env * level
+        active_output = filtered_noise * amp_env_active * level
+
+        # Zero-pad to full length
+        if decay_samples < self.num_samples:
+            if active_output.ndim == 2:
+                output = np.zeros((2, self.num_samples))
+                output[:, :decay_samples] = active_output
+            else:
+                output = np.zeros(self.num_samples)
+                output[:decay_samples] = active_output
+            return output
+
+        return active_output
 
     def generate_bassline(self, freq=55.0, length_beats=4, bpm=138.0):
         """
