@@ -1,7 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import threading
+from tkinter import ttk, filedialog, messagebox  # noqa: F401
+import threading  # noqa: F401
 from generators.kick_generator import TranceKickGenerator
+from utils.validators import InputValidator
+
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -119,9 +121,7 @@ class KickTab(ttk.Frame):
             sc_depth = self.vars["sc_depth"].get()
 
             filename = self.main_window.filename_var.get()
-
-            if not filename.endswith('.wav'):
-                filename += '.wav'
+            filename = InputValidator.sanitize_filename(filename)
 
             # Get smoke params from SmokeTab if available
             smoke_params = None
