@@ -10,6 +10,7 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.validators import InputValidator
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -470,5 +471,9 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+
+    # Sanitize output filename
+    safe_output = InputValidator.sanitize_filename(args.output)
+
+    generator.save(safe_output, audio)
+    print(f"Generated trance kick (or loop) to {safe_output}")
