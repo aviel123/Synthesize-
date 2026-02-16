@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.signal import butter, lfilter
-from effects.stereo import apply_stereo_width
+
 
 def apply_stereo_width(signal, width=0.0):
     """
@@ -38,7 +38,7 @@ def apply_stereo_width(signal, width=0.0):
 class ClapGenerator:
     def __init__(self, sample_rate=44100):
         self.sample_rate = sample_rate
-        self.duration = 0.5 # Default duration
+        self.duration = 0.5  # Default duration
         self.num_samples = int(sample_rate * self.duration)
 
     def _create_reflections(self, num_reflections=5, spacing_ms=8.0):
@@ -48,7 +48,6 @@ class ClapGenerator:
         # Reflections are typically noise bursts played in rapid succession
 
         spacing_samples = int(spacing_ms * self.sample_rate / 1000.0)
-        total_len = spacing_samples * num_reflections + 1000 # buffer
 
         # Create single burst
         burst_len_ms = 4.0
@@ -71,7 +70,7 @@ class ClapGenerator:
             end = start + len(filtered_burst)
 
             # Amplitude decay for reflections
-            amp = 1.0 - (i / (num_reflections + 1)) # Linear decay
+            amp = 1.0 - (i / (num_reflections + 1))  # Linear decay
 
             if end < self.num_samples:
                 output[start:end] += filtered_burst * amp
@@ -82,8 +81,15 @@ class ClapGenerator:
         """
         Creates the initial sharp attack using filtered noise + sine burst.
         """
+        decay_samples = int(decay_ms * self.sample_rate / 1000.0)
+
+        # Optimize: only generate signal for active duration + buffer
+        active_samples = decay_samples + 32  # Small buffer for safety
+        if active_samples > self.num_samples:
+            active_samples = self.num_samples
+
         # Noise burst
-        noise = np.random.uniform(-1, 1, self.num_samples)
+        noise = np.random.uniform(-1, 1, active_samples)
 
         # Bandpass filter for "snap" (1kHz - 5kHz)
         nyquist = 0.5 * self.sample_rate
@@ -93,21 +99,33 @@ class ClapGenerator:
         filtered_noise = lfilter(b, a, noise)
 
         # Short envelope
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-        decay_samples = int(decay_ms * self.sample_rate / 1000.0)
-
-        env = np.zeros_like(t)
+        env = np.zeros(active_samples)
         if decay_samples > 0:
             env[:decay_samples] = np.linspace(1.0, 0.0, decay_samples)
 
-        return filtered_noise * env
+        # Zero out buffer samples after decay
+        if active_samples > decay_samples:
+            env[decay_samples:] = 0.0
+
+        # Pad to full length
+        output = np.zeros(self.num_samples)
+        output[:active_samples] = filtered_noise * env
+
+        return output
 
     def _create_tail(self, length_ms=150.0):
         """
         Creates the main body/tail of the clap using pink/white noise.
         """
+        decay_samples = int(length_ms * self.sample_rate / 1000.0)
+
+        # Optimize: only generate signal for active duration
+        active_samples = decay_samples
+        if active_samples > self.num_samples:
+            active_samples = self.num_samples
+
         # Pink noise approximation (1/f)
-        white = np.random.normal(0, 1, self.num_samples)
+        white = np.random.normal(0, 1, active_samples)
         # Simple 1/f filter: -3dB/octave? Or just lowpass white noise.
         # Let's use white noise with a specific filter for "clap" character
 
@@ -119,23 +137,28 @@ class ClapGenerator:
         filtered = lfilter(b, a, white)
 
         # Envelope: Exponential decay
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-        decay_samples = int(length_ms * self.sample_rate / 1000.0)
+        t = np.arange(active_samples) / self.sample_rate
+        env = np.zeros(active_samples)
 
-        env = np.zeros_like(t)
         if decay_samples > 0:
             # Exponential decay
             k = 5.0 / (length_ms / 1000.0)
-            env[:decay_samples] = np.exp(-k * t[:decay_samples])
+            env = np.exp(-k * t)
 
-        return filtered * env
+        # Pad to full length
+        output = np.zeros(self.num_samples)
+        output[:active_samples] = filtered * env
 
-    def generate(self, transient_level=1.0, tail_length_ms=100.0, reflections=5, spacing_ms=8.0, stereo_width=0.0):
+        return output
+
+    def generate(self, transient_level=1.0, tail_length_ms=100.0,
+                 reflections=5, spacing_ms=8.0, stereo_width=0.0):
         # 1. Transient (Attack)
         transient = self._create_transient() * transient_level
 
         # 2. Reflections (Body)
-        reflections_audio = self._create_reflections(num_reflections=reflections, spacing_ms=spacing_ms)
+        reflections_audio = self._create_reflections(
+            num_reflections=reflections, spacing_ms=spacing_ms)
 
         # 3. Tail (Sustain)
         tail = self._create_tail(length_ms=tail_length_ms)
@@ -150,8 +173,8 @@ class ClapGenerator:
 
         # Apply Stereo Width
         # If width > 0, we need to create stereo content.
-        # The simple Apply Stereo Width assumes stereo input or just duplicates mono.
-        # To truly widen a clap, we can pan reflections or delay channels slightly.
+        # Apply Stereo Width assumes stereo input or duplicates mono.
+        # To truly widen a clap, we can pan reflections or delay channels.
 
         if stereo_width > 0.001:
             # Create decorrelated tail/reflections
@@ -161,6 +184,7 @@ class ClapGenerator:
             mix = apply_stereo_width(mix, width=stereo_width)
 
             # Or better: Pan reflections alternating L/R?
-            # That's complex for now. Let's stick to the utility which handles basic widening.
+            # That's complex for now.
+            # Let's stick to the utility which handles basic widening.
 
         return mix
