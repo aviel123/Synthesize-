@@ -1,0 +1,3 @@
+## 2024-05-23 - Tkinter Tooltip Accessibility
+**Learning:** `ttk.Label` and `ttk.Scale` widgets do not support the `bbox("insert")` method, which is commonly used to position tooltips over text. This causes crashes when trying to add accessibility tooltips to non-text widgets.
+**Action:** When implementing tooltips for `ttk` widgets, always wrap `bbox` calls in a try/except block and provide a fallback positioning strategy using `winfo_rootx()` and `winfo_rooty()`. Also, use `tk.Label` (not `ttk.Label`) for the tooltip popup itself to allow high-contrast background colors (e.g., yellow) which `ttk` themes often override.
