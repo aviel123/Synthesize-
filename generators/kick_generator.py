@@ -470,5 +470,9 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+
+    from utils.validators import InputValidator
+    safe_output = InputValidator.sanitize_filename(args.output)
+
+    generator.save(safe_output, audio)
+    print(f"Generated trance kick (or loop) to {safe_output}")
