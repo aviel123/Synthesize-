@@ -166,9 +166,11 @@ class AdvancedNoiseGenerator:
         end_fade_in = start_sample + fade_in_samples
         if end_fade_in > samples: end_fade_in = samples
 
-        for i in range(start_sample, end_fade_in):
-            rel_pos = (i - start_sample) / fade_in_samples
-            envelope[i] = rel_pos ** 2 # Convex fade in
+        # Fade In
+        if end_fade_in > start_sample:
+            # Vectorized convex fade in
+            t_in = np.arange(end_fade_in - start_sample)
+            envelope[start_sample:end_fade_in] = (t_in / fade_in_samples) ** 2
 
         # Sustain
         sustain_end = samples - fade_out_samples
@@ -177,8 +179,10 @@ class AdvancedNoiseGenerator:
         envelope[end_fade_in:sustain_end] = 1.0
 
         # Fade Out
-        for i in range(sustain_end, samples):
-            rel_pos = (i - sustain_end) / fade_out_samples
-            envelope[i] = 1.0 - (rel_pos ** 0.5) # Concave fade out
+        if samples > sustain_end:
+            # Vectorized concave fade out
+            t_out = np.arange(samples - sustain_end)
+            term = (t_out / fade_out_samples) ** 0.5
+            envelope[sustain_end:samples] = 1.0 - term
 
         return envelope
