@@ -10,6 +10,7 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.validators import InputValidator
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -453,6 +454,8 @@ if __name__ == "__main__":
     parser.add_argument("--sc-depth", type=float, default=0.8, help="Sidechain Depth 0.0-1.0 (default: 0.8)")
     parser.add_argument("--export-trigger", action="store_true", help="Export sidechain trigger file")
     args = parser.parse_args()
+
+    args.output = InputValidator.sanitize_filename(args.output)
 
     generator = TranceKickGenerator(duration=args.duration)
 
