@@ -1,0 +1,3 @@
+## 2024-05-23 - NumPy Random Optimization & Regression
+**Learning:** When optimizing `numpy` random generation by reducing the requested sample count (e.g., for active duration only), the output sequence is a prefix of the original longer sequence (given a fixed seed). This means the generated noise for the active segment remains identical to the baseline, allowing for exact regression testing even when changing consumption count.
+**Action:** When optimizing noise generation, rely on `np.random.seed` to verify that the active portion matches the baseline prefix, ensuring no audible change occurs despite the optimization.
