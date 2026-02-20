@@ -454,6 +454,9 @@ if __name__ == "__main__":
     parser.add_argument("--export-trigger", action="store_true", help="Export sidechain trigger file")
     args = parser.parse_args()
 
+    from utils.validators import InputValidator
+    args.output = InputValidator.sanitize_filename(args.output)
+
     generator = TranceKickGenerator(duration=args.duration)
 
     if args.export_trigger:
