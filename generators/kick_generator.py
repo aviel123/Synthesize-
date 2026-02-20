@@ -131,26 +131,23 @@ class TranceKickGenerator:
         """
         from scipy.signal import butter, lfilter
 
-        # Generate white noise (Stereo if width > 0)
-        # Actually generate mono first, then stereoize?
-        # Or generate two uncorrelated noise sources
+        # Optimization: Only generate signal for the active duration
+        decay_time = decay_ms / 1000.0
+        decay_samples = int(np.ceil(decay_time * self.sample_rate))
 
+        # Ensure we have at least one sample and don't exceed buffer
+        if decay_samples < 1: decay_samples = 1
+        if decay_samples > self.num_samples: decay_samples = self.num_samples
+
+        # Generate white noise (Stereo if width > 0)
         if width > 0.001:
             # Stereo Noise
-            noise_L = np.random.uniform(-1, 1, self.num_samples)
-            noise_R = np.random.uniform(-1, 1, self.num_samples)
-
-            # Mix towards mono based on width inverse?
-            # Actually, standard is: Width 0 = L+R/2 (Mono), Width 1 = L, R uncorrelated
-            # Let's just interpolate between Mono (L=R=Noise1) and Stereo (L=Noise1, R=Noise2)
-
-            # Better approach for controlled width:
             # Mid = Noise1
             # Side = Noise2 * width
             # L = M + S, R = M - S
 
-            mid = np.random.uniform(-1, 1, self.num_samples)
-            side = np.random.uniform(-1, 1, self.num_samples) * width
+            mid = np.random.uniform(-1, 1, decay_samples)
+            side = np.random.uniform(-1, 1, decay_samples) * width
 
             noise_L = mid + side
             noise_R = mid - side
@@ -158,7 +155,7 @@ class TranceKickGenerator:
             # Normalize approx
             noise = np.vstack((noise_L, noise_R)) # Shape (2, N)
         else:
-            noise = np.random.uniform(-1, 1, self.num_samples)
+            noise = np.random.uniform(-1, 1, decay_samples)
             # 1D array
 
         # High-pass filter at 2500Hz
@@ -173,29 +170,30 @@ class TranceKickGenerator:
             filtered_noise = lfilter(b, a, noise)
 
         # Envelope: Decay adjustable
-        decay_time = decay_ms / 1000.0
-
-        t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
-        amp_env = np.zeros_like(t)
-
-        decay_samples = int(decay_time * self.sample_rate)
-        if decay_samples > self.num_samples:
-            decay_samples = self.num_samples
-
-        # Exponential decay for crispness
-        # For Euphoria, maybe a slightly longer tail?
-        # k = 7.0 / decay_time -> standard -60dB point.
-        # If user wants "more noise", we can make the decay curve shallower?
-        # Let's keep exponential but scale amplitude by level.
+        # Generate time array for active segment only
+        t_active = np.arange(decay_samples) / self.sample_rate
 
         k = 7.0 / decay_time
-        active_indices = t < decay_time
-        t_active = t[active_indices]
 
-        amp_env[active_indices] = np.exp(-k * t_active)
-        amp_env[~active_indices] = 0.0
+        # Exponential decay
+        amp_env = np.exp(-k * t_active)
 
-        return filtered_noise * amp_env * level
+        # Strictly ensure zero if t >= decay_time (for parity with original)
+        # Original: active_indices = t < decay_time
+        mask = t_active < decay_time
+        amp_env[~mask] = 0.0
+
+        processed = filtered_noise * amp_env * level
+
+        # Pad with zeros to match full duration
+        if decay_samples < self.num_samples:
+            padding = self.num_samples - decay_samples
+            if processed.ndim == 2:
+                processed = np.pad(processed, ((0, 0), (0, padding)), 'constant')
+            else:
+                processed = np.pad(processed, (0, padding), 'constant')
+
+        return processed
 
     def generate_bassline(self, freq=55.0, length_beats=4, bpm=138.0):
         """
