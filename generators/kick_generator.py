@@ -460,6 +460,17 @@ if __name__ == "__main__":
         generator.save_sidechain_trigger("sidechain_trigger.wav")
         print("Exported sidechain_trigger.wav")
 
+    # Sanitize output filename
+    try:
+        from utils.validators import InputValidator
+        output_filename = InputValidator.sanitize_filename(args.output)
+    except ValueError as e:
+        print(f"Error: {e}")
+        exit(1)
+    except ImportError:
+        print("Error: Could not import InputValidator. Ensure you are running from the project root.")
+        exit(1)
+
     audio = generator.generate(
         click_level=args.click_level,
         click_decay_ms=args.click_decay,
@@ -470,5 +481,5 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+    generator.save(output_filename, audio)
+    print(f"Generated trance kick (or loop) to {output_filename}")

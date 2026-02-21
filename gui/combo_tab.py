@@ -4,6 +4,7 @@ import numpy as np
 from scipy.io import wavfile
 from generators.kick_generator import TranceKickGenerator
 from generators.clap_generator import ClapGenerator
+from utils.validators import InputValidator
 
 class ComboTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -163,13 +164,25 @@ class ComboTab(ttk.Frame):
                 loop = loop / max_val * 0.95
 
             # Save
-            filename = self.main_window.filename_var.get()
-            if filename == "output.wav" or filename.endswith("kick.wav") or filename.endswith("clap_output.wav"):
-                filename = "combo_loop.wav"
-                self.main_window.filename_var.set(filename)
+            raw_filename = self.main_window.filename_var.get()
+            if raw_filename == "output.wav" or raw_filename.endswith("kick.wav") or raw_filename.endswith("clap_output.wav"):
+                raw_filename = "combo_loop.wav"
+                self.main_window.filename_var.set(raw_filename)
 
-            if not filename.endswith("combo.wav") and not filename.endswith(".wav"):
-                filename += "_combo.wav"
+            # Sanitize filename
+            try:
+                filename = InputValidator.sanitize_filename(raw_filename)
+
+                # Restore combo naming logic: if user didn't provide extension, add _combo suffix
+                if not raw_filename.lower().endswith('.wav') and not filename.lower().endswith('combo.wav'):
+                     # filename is "base.wav"
+                     base = filename[:-4]
+                     filename = f"{base}_combo.wav"
+
+                self.main_window.filename_var.set(filename)
+            except ValueError as e:
+                messagebox.showerror("Invalid Filename", str(e))
+                return
 
             if loop.ndim == 2:
                 loop_save = loop.T
