@@ -10,6 +10,13 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+try:
+    from utils.validators import InputValidator
+except ImportError:
+    import sys
+    import os
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    from utils.validators import InputValidator
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -460,6 +467,8 @@ if __name__ == "__main__":
         generator.save_sidechain_trigger("sidechain_trigger.wav")
         print("Exported sidechain_trigger.wav")
 
+    output_filename = InputValidator.sanitize_filename(args.output)
+
     audio = generator.generate(
         click_level=args.click_level,
         click_decay_ms=args.click_decay,
@@ -470,5 +479,5 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+    generator.save(output_filename, audio)
+    print(f"Generated trance kick (or loop) to {output_filename}")
