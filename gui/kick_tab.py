@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 from generators.kick_generator import TranceKickGenerator
+from gui.tooltip import ToolTip
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -37,16 +38,24 @@ class KickTab(ttk.Frame):
         q_combo.pack(side=tk.LEFT)
         ttk.Label(q_frame, text="(1=Std, 2=High/Oversampled)").pack(side=tk.LEFT, padx=5)
 
-        self.create_slider(synth_frame, "Duration (s)", 0.1, 1.0, 0.5, "duration")
-        self.create_slider(synth_frame, "Start Phase (deg)", 0.0, 360.0, 0.0, "phase")
-        self.create_slider(synth_frame, "Click/Noise Level", 0.0, 3.0, 1.0, "click_level")
-        self.create_slider(synth_frame, "Click Decay (ms)", 5.0, 100.0, 10.0, "click_decay")
-        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0, 2.0, 0.0, "click_width")
+        self.create_slider(synth_frame, "Duration (s)", 0.1, 1.0, 0.5, "duration",
+                           tooltip_text="Length of the kick drum sample in seconds")
+        self.create_slider(synth_frame, "Start Phase (deg)", 0.0, 360.0, 0.0, "phase",
+                           tooltip_text="Adjusts the starting phase alignment of the sub/punch")
+        self.create_slider(synth_frame, "Click/Noise Level", 0.0, 3.0, 1.0, "click_level",
+                           tooltip_text="Volume of the high-frequency click/noise layer")
+        self.create_slider(synth_frame, "Click Decay (ms)", 5.0, 100.0, 10.0, "click_decay",
+                           tooltip_text="Length of the click envelope (5-15ms typical for trance)")
+        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0, 2.0, 0.0, "click_width",
+                           tooltip_text="Stereo width of the noise layer (0=Mono, 1=Wide)")
 
         # --- Effects Tab ---
-        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5, "drive")
-        self.create_slider(fx_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb")
-        self.create_slider(fx_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay")
+        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5, "drive",
+                           tooltip_text="Amount of soft-clipping distortion to add harmonics")
+        self.create_slider(fx_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb",
+                           tooltip_text="Mix level of the short reverb tail")
+        self.create_slider(fx_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay",
+                           tooltip_text="Mix level of the stereo ping-pong delay")
 
         # --- Bassline Tab ---
         bass_frame = ttk.LabelFrame(bass_frame_tab, text="Bassline & Sidechain (VST/DAW Integration)", padding="10")
@@ -58,9 +67,11 @@ class KickTab(ttk.Frame):
         bass_chk.pack(anchor=tk.W)
 
         # Bass Freq
-        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq")
+        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq",
+                           tooltip_text="Pitch of the bassline (e.g., 55Hz for A1)")
         # Sidechain Depth
-        self.create_slider(bass_frame, "Sidechain Depth", 0.0, 1.0, 0.8, "sc_depth")
+        self.create_slider(bass_frame, "Sidechain Depth", 0.0, 1.0, 0.8, "sc_depth",
+                           tooltip_text="Amount of volume ducking on the bass when the kick hits")
 
         # Export Trigger Button
         trigger_btn = ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)", command=self.export_trigger)
@@ -72,15 +83,21 @@ class KickTab(ttk.Frame):
         generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
         generate_btn.pack(side=tk.LEFT, padx=5)
 
-    def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
+    def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name, tooltip_text=None):
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, pady=5)
 
         lbl = ttk.Label(frame, text=label_text, width=25)
         lbl.pack(side=tk.LEFT)
 
+        if tooltip_text:
+            ToolTip(lbl, tooltip_text)
+
         var = tk.DoubleVar(value=default_val)
         scale = ttk.Scale(frame, from_=min_val, to=max_val, orient=tk.HORIZONTAL, variable=var, length=200)
+
+        if tooltip_text:
+            ToolTip(scale, tooltip_text)
         scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         val_lbl = ttk.Label(frame, text=f"{default_val:.2f}", width=6)
