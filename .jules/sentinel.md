@@ -1,0 +1,4 @@
+## 2024-05-23 - Path Traversal in Audio Export
+**Vulnerability:** User input from both CLI arguments (`--output`) and GUI text fields (`Entry` widget) was directly passed to `scipy.io.wavfile.write`, allowing file writes to arbitrary paths (e.g., `../../etc/passwd`).
+**Learning:** In desktop applications using `tkinter`, file dialogs return absolute paths, but manual text entry fields (often used for quick naming) are raw strings that bypass OS-level dialog sanitization. Developers often overlook sanitizing manual text inputs when a "Save As" dialog is also available.
+**Prevention:** Always wrap file writing operations with a strict sanitization layer (`InputValidator.sanitize_filename`) that strips directory components (`os.path.basename`) and enforces extensions, regardless of the input source (GUI or CLI).
