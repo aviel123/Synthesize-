@@ -10,6 +10,7 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+from utils.validators import InputValidator
 
 class TranceKickGenerator:
     def __init__(self, sample_rate=44100, duration=0.5):
@@ -257,6 +258,7 @@ class TranceKickGenerator:
         """
         Exports a short click track for sidechain key input in DAWs.
         """
+        filename = InputValidator.sanitize_filename(filename, "sidechain_trigger.wav")
         duration = 0.05 # 50ms click
         t = np.linspace(0, duration, int(self.sample_rate * duration), endpoint=False)
         click = np.sin(2 * np.pi * 1000.0 * t) * np.exp(-t * 100.0)
@@ -470,5 +472,6 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth
     )
-    generator.save(args.output, audio)
-    print(f"Generated trance kick (or loop) to {args.output}")
+    output_filename = InputValidator.sanitize_filename(args.output)
+    generator.save(output_filename, audio)
+    print(f"Generated trance kick (or loop) to {output_filename}")
