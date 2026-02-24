@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 from generators.kick_generator import TranceKickGenerator
+from utils.validators import validate_filename
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -119,6 +120,9 @@ class KickTab(ttk.Frame):
             sc_depth = self.vars["sc_depth"].get()
 
             filename = self.main_window.filename_var.get()
+
+            # Security check
+            validate_filename(filename)
 
             if not filename.endswith('.wav'):
                 filename += '.wav'
