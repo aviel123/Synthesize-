@@ -4,6 +4,7 @@ import numpy as np
 from scipy.io import wavfile
 from generators.kick_generator import TranceKickGenerator
 from generators.clap_generator import ClapGenerator
+from utils.validators import validate_filename
 
 class ComboTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -167,6 +168,9 @@ class ComboTab(ttk.Frame):
             if filename == "output.wav" or filename.endswith("kick.wav") or filename.endswith("clap_output.wav"):
                 filename = "combo_loop.wav"
                 self.main_window.filename_var.set(filename)
+
+            # Security check
+            validate_filename(filename)
 
             if not filename.endswith("combo.wav") and not filename.endswith(".wav"):
                 filename += "_combo.wav"
