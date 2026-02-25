@@ -1,0 +1,3 @@
+## 2024-05-23 - Active Duration Optimization Trade-offs
+**Learning:** Optimizing signal generation by calculating only the active duration and padding with zeros is highly effective for short transients (<10% duration), yielding ~5x speedups. However, for longer active regions (>60% duration), the overhead of allocating multiple smaller arrays plus a final large array and copying data can outweigh the computational savings of skipping `sin`/`exp` calls, resulting in neutral or slightly negative performance.
+**Action:** Apply active-duration optimization aggressively for short envelopes (clicks, punches) but benchmark carefully before applying to long-decay components (bodies, pads).
