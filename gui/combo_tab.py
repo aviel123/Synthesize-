@@ -4,6 +4,7 @@ import numpy as np
 from scipy.io import wavfile
 from generators.kick_generator import TranceKickGenerator
 from generators.clap_generator import ClapGenerator
+from utils.validators import validate_filename
 
 class ComboTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -55,6 +56,9 @@ class ComboTab(ttk.Frame):
 
     def generate(self):
         try:
+            filename = self.main_window.filename_var.get()
+            validate_filename(filename)
+
             self.main_window.status_var.set("Generating Combo Loop...")
             self.update_idletasks()
 

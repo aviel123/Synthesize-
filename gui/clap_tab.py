@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import numpy as np
 from scipy.io import wavfile
 from generators.clap_generator import ClapGenerator
+from utils.validators import validate_filename
 
 class ClapTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -49,19 +50,21 @@ class ClapTab(ttk.Frame):
 
     def generate(self):
         try:
-            # Get values
-            transient = self.vars["transient_level"].get()
-            reflections = int(self.vars["reflections"].get())
-            spacing = self.vars["spacing"].get()
-            tail = self.vars["tail_length"].get()
-            width = self.vars["width"].get()
-
             filename = self.main_window.filename_var.get()
 
             # Auto-rename if needed to avoid overwriting kick
             if filename == "output.wav" or filename.endswith("kick.wav"):
                 filename = "clap_output.wav"
                 self.main_window.filename_var.set(filename)
+
+            validate_filename(filename)
+
+            # Get values
+            transient = self.vars["transient_level"].get()
+            reflections = int(self.vars["reflections"].get())
+            spacing = self.vars["spacing"].get()
+            tail = self.vars["tail_length"].get()
+            width = self.vars["width"].get()
 
             if not filename.endswith('.wav'):
                 filename += '.wav'
