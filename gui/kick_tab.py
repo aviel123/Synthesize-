@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 from generators.kick_generator import TranceKickGenerator
+from utils.validators import validate_filename
 
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
@@ -102,6 +103,9 @@ class KickTab(ttk.Frame):
 
     def generate(self):
         try:
+            filename = self.main_window.filename_var.get()
+            validate_filename(filename)
+
             # Get values
             oversample = self.vars["oversample"].get()
             duration = self.vars["duration"].get()
@@ -117,8 +121,6 @@ class KickTab(ttk.Frame):
             generate_bass = self.vars["bass"].get()
             bass_freq = self.vars["bass_freq"].get()
             sc_depth = self.vars["sc_depth"].get()
-
-            filename = self.main_window.filename_var.get()
 
             if not filename.endswith('.wav'):
                 filename += '.wav'
