@@ -26,9 +26,14 @@ class SequencerTab(ttk.Frame):
         self._playing     = False
         self._play_thread = None
         self._audio_cache = None
-        self._step_buttons    = {}                              # (row, step) -> tk.Button
-        self._pattern         = {                              # (row, step) -> bool
+        self._step_buttons = {}                              # (row, step) -> tk.Button
+        self._pattern      = {                              # (row, step) -> bool
             (r, s): False
+            for r in range(len(self.ROWS))
+            for s in range(self.MAX_STEPS)
+        }
+        self._velocity     = {                              # (row, step) -> 0.0–1.0
+            (r, s): 1.0
             for r in range(len(self.ROWS))
             for s in range(self.MAX_STEPS)
         }
@@ -59,6 +64,15 @@ class SequencerTab(ttk.Frame):
             side=tk.LEFT, padx=(4, 14))
         self._steps_var.trace_add("write", lambda *_: self._update_step_visibility())
 
+        ttk.Label(header, text="Swing:").pack(side=tk.LEFT)
+        self._swing_var = tk.DoubleVar(value=50.0)
+        ttk.Scale(header, from_=50, to=75, variable=self._swing_var,
+                  orient=tk.HORIZONTAL, length=80).pack(side=tk.LEFT, padx=4)
+        self._swing_lbl = ttk.Label(header, text="50%", width=4)
+        self._swing_lbl.pack(side=tk.LEFT, padx=(0, 12))
+        self._swing_var.trace_add("write",
+            lambda *_: self._swing_lbl.config(text=f"{self._swing_var.get():.0f}%"))
+
         self._play_btn = ttk.Button(header, text="▶  Play", command=self._toggle_play)
         self._play_btn.pack(side=tk.LEFT, padx=(0, 6))
 
@@ -86,6 +100,8 @@ class SequencerTab(ttk.Frame):
                     command=lambda rr=r, ss=s: self._toggle_step(rr, ss),
                 )
                 btn.grid(row=r * 2, column=s + 1, padx=1, pady=2)
+                btn.bind("<Button-3>",
+                         lambda e, rr=r, ss=s: self._open_velocity_popup(rr, ss, e))
                 self._step_buttons[(r, s)] = btn
 
         # ── Playhead indicators ──
@@ -133,8 +149,12 @@ class SequencerTab(ttk.Frame):
         active = self._pattern[key]
         grp = (step // 4) % 2
         off_bg = "#2a2a4e" if grp == 0 else "#24244a"
-        self._step_buttons[key].config(
-            bg=self.ROWS[row][1] if active else off_bg)
+        if active:
+            vel = self._velocity.get(key, 1.0)
+            color = self._btn_color_for_velocity(row, vel)
+        else:
+            color = off_bg
+        self._step_buttons[key].config(bg=color)
 
     def _set_default_pattern(self):
         """Classic 4-on-the-floor + snare-on-2&4 + off-beat hi-hat."""
@@ -150,6 +170,56 @@ class SequencerTab(ttk.Frame):
             for s in range(self.MAX_STEPS):
                 if self._pattern[(r, s)]:
                     self._toggle_step(r, s)
+
+    # ── Velocity helpers ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _hex_to_rgb(hex_color):
+        return (int(hex_color[1:3], 16),
+                int(hex_color[3:5], 16),
+                int(hex_color[5:7], 16))
+
+    def _btn_color_for_velocity(self, row, vel):
+        """Blend between full track color (vel=1) and dark background (vel≈0)."""
+        tr, tg, tb = self._hex_to_rgb(self.ROWS[row][1])
+        dr, dg, db = 0x2a, 0x2a, 0x4e
+        r = int(dr + (tr - dr) * vel)
+        g = int(dg + (tg - dg) * vel)
+        b = int(db + (tb - db) * vel)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _open_velocity_popup(self, row, step, event):
+        """Right-click popup to set per-step velocity."""
+        popup = tk.Toplevel(self)
+        popup.title(f"{self.ROWS[row][0]}  step {step + 1}  — Velocity")
+        popup.resizable(False, False)
+        popup.grab_set()
+
+        cur_vel = self._velocity.get((row, step), 1.0)
+        vel_var = tk.DoubleVar(value=cur_vel)
+
+        tk.Label(popup, text="Velocity  (0 = silent, 1 = full)",
+                 font=("Helvetica", 9)).pack(padx=12, pady=(10, 2))
+
+        val_lbl = tk.Label(popup, text=f"{cur_vel:.2f}", width=5,
+                           font=("Courier", 10, "bold"))
+        val_lbl.pack()
+
+        def _on_change(v):
+            val_lbl.config(text=f"{float(v):.2f}")
+
+        ttk.Scale(popup, from_=0.0, to=1.0, variable=vel_var,
+                  orient=tk.HORIZONTAL, length=180,
+                  command=_on_change).pack(padx=12, pady=6)
+
+        def _apply():
+            self._velocity[(row, step)] = vel_var.get()
+            if self._pattern[(row, step)]:
+                color = self._btn_color_for_velocity(row, vel_var.get())
+                self._step_buttons[(row, step)].config(bg=color)
+            popup.destroy()
+
+        ttk.Button(popup, text="OK", command=_apply).pack(pady=(0, 10))
 
     # ── Playback ────────────────────────────────────────────────────────────
 
@@ -188,23 +258,32 @@ class SequencerTab(ttk.Frame):
 
         step = 0
         while self._playing:
-            bpm   = self._bpm_var.get()
-            steps = self._steps_var.get()
-            step_dur = 60.0 / bpm / 4       # one 16th note in seconds
+            bpm      = self._bpm_var.get()
+            steps    = self._steps_var.get()
+            swing    = self._swing_var.get()  # 50–75 %
+            step_dur = 60.0 / bpm / 4         # one 16th note in seconds
             n_samp   = int(step_dur * SR)
+
+            # Swing delay: odd steps start slightly late, pushing off-beats back
+            # swing=50 → 0 delay; swing=66.7 → triplet; swing=75 → heavy
+            s_idx = step % steps
+            swing_offset = 0
+            if s_idx % 2 == 1 and swing > 50.0:
+                swing_offset = int((swing / 100.0 - 0.5) * step_dur * SR)
+                swing_offset = min(swing_offset, n_samp // 2)
 
             mix = np.zeros(n_samp, dtype=np.float32)
             for r in range(len(self.ROWS)):
-                if self._pattern.get((r, step % steps), False):
+                if self._pattern.get((r, s_idx), False):
                     clip = self._audio_cache.get(r, np.zeros(1, np.float32))
-                    n = min(len(clip), n_samp)
-                    mix[:n] += clip[:n]
+                    vel  = self._velocity.get((r, s_idx), 1.0)
+                    n    = min(len(clip), n_samp - swing_offset)
+                    if n > 0:
+                        mix[swing_offset:swing_offset + n] += clip[:n] * vel
 
             mix = np.clip(mix, -1.0, 1.0)
 
-            s_now = step % steps
-
-            def _highlight(s=s_now):
+            def _highlight(s=s_idx):
                 self._clear_indicators()
                 if s < len(self._step_indicators):
                     self._step_indicators[s].config(bg="#f39c12")
@@ -297,14 +376,23 @@ class SequencerTab(ttk.Frame):
 
         audio_cache = self._prebuild_audio(SR)
 
+        swing = self._swing_var.get()
+        step_samp = int(step_dur * SR)
+
         for s in range(steps):
-            offset = int(s * step_dur * SR)
+            base_offset = int(s * step_dur * SR)
+            swing_offset = 0
+            if s % 2 == 1 and swing > 50.0:
+                swing_offset = int((swing / 100.0 - 0.5) * step_dur * SR)
+                swing_offset = min(swing_offset, step_samp // 2)
+            offset = base_offset + swing_offset
             for r in range(len(self.ROWS)):
                 if self._pattern.get((r, s), False):
                     clip = audio_cache.get(r, np.zeros(1, np.float32))
+                    vel  = self._velocity.get((r, s), 1.0)
                     n = min(len(clip), total_samples - offset)
                     if n > 0:
-                        mix[offset:offset + n] += clip[:n]
+                        mix[offset:offset + n] += clip[:n] * vel
 
         mix = np.clip(mix, -1.0, 1.0)
         wav.write(path, SR, (mix * 32767).astype(np.int16))

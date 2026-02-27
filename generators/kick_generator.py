@@ -4,6 +4,7 @@ import argparse
 
 from effects.saturation import apply_saturation
 from effects.distortion import apply_distortion
+from effects.lfo import generate_lfo
 from effects.compression import apply_compression
 from effects.eq import apply_eq
 from effects.reverb import apply_reverb
@@ -53,20 +54,34 @@ class TranceKickGenerator:
 
         return signal * amp_env
 
-    def generate_body(self, phase_deg=0.0, body_freq=55.0, decay_ms=500.0):
+    def generate_body(self, phase_deg=0.0, body_freq=55.0, decay_ms=500.0,
+                      lfo_rate_hz=0.0, lfo_depth=0.0, lfo_waveform='sine'):
         """
         Kick Body Layer - Deep sustained sine at body_freq.
 
         body_freq: Fundamental frequency in Hz. Should match punch base_freq
                    so both layers are tuned to the same note.
         decay_ms: Duration until -60dB. Longer = deeper sustain.
+        lfo_rate_hz / lfo_depth / lfo_waveform: optional frequency modulation
+                   (vibrato) applied to the body tail only.  depth=0 = off.
         """
         decay_time = max(decay_ms / 1000.0, 1e-6)
 
         t = np.linspace(0, self.duration, self.num_samples, endpoint=False)
 
         phase_offset = phase_deg * np.pi / 180.0
-        signal = np.sin(2 * np.pi * body_freq * t + phase_offset)
+
+        if lfo_rate_hz > 0.0 and lfo_depth > 0.0:
+            # Frequency-modulated body: freq(t) = body_freq * (1 + lfo(t))
+            lfo = generate_lfo(self.num_samples, self.sample_rate,
+                               rate_hz=lfo_rate_hz, waveform=lfo_waveform,
+                               depth=lfo_depth)
+            freq_t = np.maximum(body_freq * (1.0 + lfo), 20.0)
+            phase  = 2.0 * np.pi * np.cumsum(freq_t) / self.sample_rate
+        else:
+            phase = 2.0 * np.pi * body_freq * t
+
+        signal = np.sin(phase + phase_offset)
 
         # Exponential decay reaching -60dB at decay_time
         k = 7.0 / decay_time
@@ -164,7 +179,9 @@ class TranceKickGenerator:
                  phase_deg=0.0, smoke_params=None,
                  body_freq=55.0, punch_semitones=24,
                  punch_decay_ms=40.0, body_decay_ms=500.0,
-                 distortion_amount=0.0, distortion_mode='hard_clip'):
+                 distortion_amount=0.0, distortion_mode='hard_clip',
+                 lfo_target='none', lfo_waveform='sine',
+                 lfo_rate_hz=2.0, lfo_depth=0.0):
         """
         Generate the kick drum.
 
@@ -175,6 +192,10 @@ class TranceKickGenerator:
         oversample: 1 (Standard) or 2 (High Quality - runs at 2x sample rate).
         distortion_amount: 0.0 = off, 1.0 = maximum (applied after saturation).
         distortion_mode: 'hard_clip' | 'foldback' | 'wavefolder' | 'bitcrush'
+        lfo_target:   'none' | 'body_freq' | 'drive'
+        lfo_waveform: 'sine' | 'square' | 'saw' | 'triangle'
+        lfo_rate_hz:  LFO oscillation speed in Hz
+        lfo_depth:    0.0 = off, 1.0 = full modulation
         """
         original_rate = self.sample_rate
 
@@ -192,7 +213,10 @@ class TranceKickGenerator:
         body = self.generate_body(
             phase_deg=phase_deg,
             body_freq=body_freq,
-            decay_ms=body_decay_ms
+            decay_ms=body_decay_ms,
+            lfo_rate_hz=lfo_rate_hz if lfo_target == 'body_freq' else 0.0,
+            lfo_depth=lfo_depth     if lfo_target == 'body_freq' else 0.0,
+            lfo_waveform=lfo_waveform,
         )
         click = self.generate_click(level=click_level, decay_ms=click_decay_ms, width=click_width)
 
@@ -239,7 +263,19 @@ class TranceKickGenerator:
             mix = mix + smoke_layer
 
         # 3. Effects Chain
-        processed = apply_saturation(mix, drive_db=drive_db)
+        if lfo_target == 'drive' and lfo_depth > 0.0:
+            # LFO modulates the drive level: tremolo-like amplitude variation
+            lfo = generate_lfo(mix.shape[-1], self.sample_rate,
+                               rate_hz=lfo_rate_hz, waveform=lfo_waveform,
+                               depth=lfo_depth)
+            modulated_drive = np.clip(drive_db * (1.0 + lfo), 0.0, 20.0)
+            # Apply per-sample gain variation after saturation at base drive
+            processed = apply_saturation(mix, drive_db=drive_db)
+            # Multiply by normalised LFO (1 + lfo ranges 0 to 2 → average = 1)
+            processed = processed * (1.0 + lfo)
+        else:
+            processed = apply_saturation(mix, drive_db=drive_db)
+
         # Distortion (after saturation, before reverb — keeps room sound clean)
         if distortion_amount > 0.001:
             processed = apply_distortion(processed, amount=distortion_amount, mode=distortion_mode)

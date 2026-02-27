@@ -14,6 +14,7 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from effects.distortion import apply_distortion
+from effects.lfo import generate_lfo
 
 SR = 44100
 
@@ -229,3 +230,52 @@ class TestDistortion:
         for mode in ('hard_clip', 'foldback', 'wavefolder', 'bitcrush'):
             out = apply_distortion(sig, amount=0.5, mode=mode)
             assert not np.any(np.isnan(out)), f"NaN in mode {mode}"
+
+
+class TestLFO:
+    def test_output_length(self):
+        lfo = generate_lfo(4410, 44100, rate_hz=2.0)
+        assert len(lfo) == 4410
+
+    def test_output_range_depth(self):
+        depth = 0.4
+        lfo = generate_lfo(4410, 44100, rate_hz=1.0, depth=depth)
+        assert np.max(lfo) <= depth + 1e-6
+        assert np.min(lfo) >= -depth - 1e-6
+
+    def test_zero_depth_all_zeros(self):
+        lfo = generate_lfo(4410, 44100, rate_hz=2.0, depth=0.0)
+        np.testing.assert_array_equal(lfo, np.zeros(4410))
+
+    def test_sine_waveform_no_nan(self):
+        lfo = generate_lfo(4410, 44100, waveform='sine', depth=0.5)
+        assert not np.any(np.isnan(lfo))
+
+    def test_square_waveform_no_nan(self):
+        lfo = generate_lfo(4410, 44100, waveform='square', depth=0.5)
+        assert not np.any(np.isnan(lfo))
+
+    def test_saw_waveform_no_nan(self):
+        lfo = generate_lfo(4410, 44100, waveform='saw', depth=0.5)
+        assert not np.any(np.isnan(lfo))
+
+    def test_triangle_waveform_no_nan(self):
+        lfo = generate_lfo(4410, 44100, waveform='triangle', depth=0.5)
+        assert not np.any(np.isnan(lfo))
+
+    def test_all_waveforms_correct_range(self):
+        for wf in ('sine', 'square', 'saw', 'triangle'):
+            lfo = generate_lfo(4410, 44100, waveform=wf, depth=0.6)
+            assert np.max(lfo) <= 0.6 + 1e-6, f"{wf} exceeded depth"
+            assert np.min(lfo) >= -0.6 - 1e-6, f"{wf} below -depth"
+
+    def test_kick_body_with_lfo(self):
+        """LFO on body_freq should not produce NaN and should differ from non-LFO."""
+        from generators.kick_generator import TranceKickGenerator
+        gen = TranceKickGenerator(sample_rate=44100, duration=0.3)
+        body_normal = gen.generate_body(body_freq=55.0, decay_ms=300.0)
+        body_lfo    = gen.generate_body(body_freq=55.0, decay_ms=300.0,
+                                        lfo_rate_hz=3.0, lfo_depth=0.1,
+                                        lfo_waveform='sine')
+        assert not np.any(np.isnan(body_lfo))
+        assert not np.allclose(body_normal, body_lfo)

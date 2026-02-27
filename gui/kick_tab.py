@@ -74,6 +74,8 @@ class KickTab(ttk.Frame):
         self.main_window = main_window
         self.vars = {}
         self._distortion_type_var = tk.StringVar(value="hard_clip")
+        self._lfo_target_var   = tk.StringVar(value="none")
+        self._lfo_waveform_var = tk.StringVar(value="sine")
 
         # Internal notebook
         notebook = ttk.Notebook(self)
@@ -161,6 +163,31 @@ class KickTab(ttk.Frame):
 
         self.create_slider(fx_frame, "Distortion Amount", 0.0, 1.0, 0.0, "distortion_amount")
 
+        ttk.Separator(fx_frame, orient="horizontal").pack(fill=tk.X, pady=8)
+        ttk.Label(fx_frame, text="── LFO (body modulation) ──",
+                  foreground="gray").pack(anchor=tk.W, pady=(0, 4))
+
+        lfo_target_frame = ttk.Frame(fx_frame)
+        lfo_target_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(lfo_target_frame, text="LFO Target:", width=25).pack(side=tk.LEFT)
+        ttk.Combobox(
+            lfo_target_frame, textvariable=self._lfo_target_var,
+            values=["none", "body_freq", "drive"],
+            state="readonly", width=12,
+        ).pack(side=tk.LEFT)
+
+        lfo_wave_frame = ttk.Frame(fx_frame)
+        lfo_wave_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(lfo_wave_frame, text="LFO Waveform:", width=25).pack(side=tk.LEFT)
+        ttk.Combobox(
+            lfo_wave_frame, textvariable=self._lfo_waveform_var,
+            values=["sine", "square", "saw", "triangle"],
+            state="readonly", width=12,
+        ).pack(side=tk.LEFT)
+
+        self.create_slider(fx_frame, "LFO Rate (Hz)",  0.05, 20.0, 2.0, "lfo_rate_hz")
+        self.create_slider(fx_frame, "LFO Depth",      0.0,   1.0, 0.0, "lfo_depth")
+
         # ── Bassline Tab ──────────────────────────────────────────────────
         bass_frame = ttk.LabelFrame(bass_frame_tab,
                                     text="Bassline & Sidechain (VST/DAW Integration)",
@@ -218,6 +245,10 @@ class KickTab(ttk.Frame):
         for key, val in preset.items():
             if key == "distortion_type":
                 self._distortion_type_var.set(val)
+            elif key == "lfo_target":
+                self._lfo_target_var.set(val)
+            elif key == "lfo_waveform":
+                self._lfo_waveform_var.set(val)
             elif key in self.vars:
                 self.vars[key].set(val)
 
@@ -228,8 +259,10 @@ class KickTab(ttk.Frame):
         params = {}
         for key, var in self.vars.items():
             params[key] = var.get()
-        params["distortion_type"] = self._distortion_type_var.get()
-        params["_preset_name"] = self._preset_var.get()
+        params["distortion_type"]  = self._distortion_type_var.get()
+        params["lfo_target"]       = self._lfo_target_var.get()
+        params["lfo_waveform"]     = self._lfo_waveform_var.get()
+        params["_preset_name"]     = self._preset_var.get()
         return params
 
     def save_preset(self):
@@ -264,6 +297,10 @@ class KickTab(ttk.Frame):
                     continue
                 if key == "distortion_type":
                     self._distortion_type_var.set(val)
+                elif key == "lfo_target":
+                    self._lfo_target_var.set(val)
+                elif key == "lfo_waveform":
+                    self._lfo_waveform_var.set(val)
                 elif key in self.vars:
                     self.vars[key].set(val)
             name = params.get("_preset_name", "")
@@ -303,6 +340,10 @@ class KickTab(ttk.Frame):
         delay            = self.vars["delay"].get()
         distortion_amt   = self.vars["distortion_amount"].get()
         distortion_mode  = self._distortion_type_var.get()
+        lfo_target       = self._lfo_target_var.get()
+        lfo_waveform     = self._lfo_waveform_var.get()
+        lfo_rate_hz      = self.vars["lfo_rate_hz"].get()
+        lfo_depth        = self.vars["lfo_depth"].get()
         generate_bass    = self.vars["bass"].get()
         bass_freq        = self.vars["bass_freq"].get()
         sc_depth         = self.vars["sc_depth"].get()
@@ -331,6 +372,10 @@ class KickTab(ttk.Frame):
                     delay_amount=delay,
                     distortion_amount=distortion_amt,
                     distortion_mode=distortion_mode,
+                    lfo_target=lfo_target,
+                    lfo_waveform=lfo_waveform,
+                    lfo_rate_hz=lfo_rate_hz,
+                    lfo_depth=lfo_depth,
                     generate_bass=generate_bass,
                     bass_freq=bass_freq,
                     sc_depth=sc_depth,
