@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 import json
+import random as _random
 from generators.kick_generator import TranceKickGenerator
 from gui.envelope_editor import EnvelopeEditor
 
@@ -74,8 +75,9 @@ class KickTab(ttk.Frame):
         self.main_window = main_window
         self.vars = {}
         self._distortion_type_var = tk.StringVar(value="hard_clip")
-        self._lfo_target_var   = tk.StringVar(value="none")
-        self._lfo_waveform_var = tk.StringVar(value="sine")
+        self._lfo_target_var      = tk.StringVar(value="none")
+        self._lfo_waveform_var    = tk.StringVar(value="sine")
+        self._ab_slots = {"A": None, "B": None}   # preset snapshots
 
         # Internal notebook
         notebook = ttk.Notebook(self)
@@ -204,13 +206,38 @@ class KickTab(ttk.Frame):
         ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)",
                    command=self.export_trigger).pack(pady=5)
 
-        # Bottom button bar: Generate | Save Preset | Load Preset
+        # ── Bottom button rows ─────────────────────────────────────────────
         btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=10)
-        self.generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
+        btn_frame.pack(fill=tk.X, pady=(8, 2))
+        self.generate_btn = ttk.Button(btn_frame, text="Generate Kick",
+                                       command=self.generate)
         self.generate_btn.pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Save Preset…", command=self.save_preset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Load Preset…", command=self.load_preset_file).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Randomize 🎲",
+                   command=self.randomize).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Save Preset…",
+                   command=self.save_preset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Load Preset…",
+                   command=self.load_preset_file).pack(side=tk.LEFT, padx=5)
+
+        # A/B comparison row
+        ab_frame = ttk.Frame(self)
+        ab_frame.pack(fill=tk.X, pady=(2, 10))
+        ttk.Label(ab_frame, text="A/B Compare:", width=12).pack(side=tk.LEFT, padx=(5, 2))
+        self._ab_a_btn = ttk.Button(ab_frame, text="◀ A", width=5,
+                                    command=lambda: self._ab_load("A"))
+        self._ab_a_btn.pack(side=tk.LEFT, padx=2)
+        ttk.Button(ab_frame, text="→ A", width=5,
+                   command=lambda: self._ab_store("A")).pack(side=tk.LEFT, padx=2)
+        ttk.Separator(ab_frame, orient="vertical").pack(side=tk.LEFT, fill=tk.Y,
+                                                         padx=6, pady=2)
+        ttk.Button(ab_frame, text="→ B", width=5,
+                   command=lambda: self._ab_store("B")).pack(side=tk.LEFT, padx=2)
+        self._ab_b_btn = ttk.Button(ab_frame, text="◀ B", width=5,
+                                    command=lambda: self._ab_load("B"))
+        self._ab_b_btn.pack(side=tk.LEFT, padx=2)
+        self._ab_status_lbl = ttk.Label(ab_frame, text="A: empty  B: empty",
+                                        foreground="#888888")
+        self._ab_status_lbl.pack(side=tk.LEFT, padx=8)
 
         # Load the default preset
         self._load_preset()
@@ -309,6 +336,94 @@ class KickTab(ttk.Frame):
             self.main_window.status_var.set(f"Preset loaded: {path}")
         except Exception as e:
             messagebox.showerror("Load Error", str(e))
+
+    # ── Randomize ──────────────────────────────────────────────────────────
+
+    def randomize(self):
+        """Randomize synthesis parameters within musically sensible bounds."""
+        rng = _random.Random()
+
+        # Body & Pitch (musically grounded)
+        self.vars["body_freq"].set(rng.uniform(40.0, 72.0))
+        self.vars["body_decay"].set(rng.uniform(200.0, 700.0))
+        self.vars["punch_semitones"].set(rng.uniform(12.0, 36.0))
+        self.vars["punch_decay"].set(rng.uniform(15.0, 65.0))
+        self.vars["duration"].set(rng.uniform(0.35, 0.85))
+        self.vars["phase"].set(0.0)   # keep phase deterministic
+
+        # Transient
+        self.vars["click_level"].set(rng.uniform(0.3, 2.0))
+        self.vars["click_decay"].set(rng.uniform(3.0, 20.0))
+        self.vars["click_width"].set(rng.uniform(0.0, 0.5))
+
+        # Effects
+        self.vars["drive"].set(rng.uniform(2.0, 10.0))
+        self.vars["reverb"].set(rng.uniform(0.0, 0.12) if rng.random() < 0.25 else 0.0)
+        self.vars["delay"].set(0.0)
+
+        # Distortion (35 % chance, biased toward lower amounts)
+        if rng.random() < 0.35:
+            self.vars["distortion_amount"].set(rng.uniform(0.1, 0.55))
+            self._distortion_type_var.set(
+                rng.choice(["hard_clip", "hard_clip", "foldback", "wavefolder"]))
+        else:
+            self.vars["distortion_amount"].set(0.0)
+
+        # LFO (20 % chance of body_freq wub)
+        if rng.random() < 0.20:
+            self._lfo_target_var.set("body_freq")
+            self._lfo_waveform_var.set(rng.choice(["sine", "triangle"]))
+            self.vars["lfo_rate_hz"].set(rng.uniform(0.5, 6.0))
+            self.vars["lfo_depth"].set(rng.uniform(0.05, 0.25))
+        else:
+            self._lfo_target_var.set("none")
+            self.vars["lfo_depth"].set(0.0)
+
+        self._preset_var.set("— Randomized —")
+        self.main_window.status_var.set("Randomized! Press Generate to hear.")
+
+    # ── A/B Comparison ─────────────────────────────────────────────────────
+
+    def _ab_store(self, slot):
+        """Snapshot the current parameters into slot A or B."""
+        self._ab_slots[slot] = self._current_params()
+        self._ab_update_status()
+        self.main_window.status_var.set(
+            f"Stored to {slot} — press ◀ {slot} to recall anytime.")
+
+    def _ab_load(self, slot):
+        """Restore parameters from slot A or B."""
+        params = self._ab_slots.get(slot)
+        if params is None:
+            self.main_window.status_var.set(
+                f"Slot {slot} is empty — press → {slot} to store first.")
+            return
+        for key, val in params.items():
+            if key.startswith("_"):
+                continue
+            if key == "distortion_type":
+                self._distortion_type_var.set(val)
+            elif key == "lfo_target":
+                self._lfo_target_var.set(val)
+            elif key == "lfo_waveform":
+                self._lfo_waveform_var.set(val)
+            elif key in self.vars:
+                self.vars[key].set(val)
+        pname = params.get("_preset_name", "")
+        if pname:
+            self._preset_var.set(pname)
+        self.main_window.status_var.set(f"Loaded {slot}.")
+
+    def _ab_update_status(self):
+        filled = {k: ("● filled" if v else "○ empty")
+                  for k, v in self._ab_slots.items()}
+        self._ab_status_lbl.config(
+            text=f"A: {filled['A']}   B: {filled['B']}")
+        # Highlight buttons that have data
+        self._ab_a_btn.config(
+            style="Accent.TButton" if self._ab_slots["A"] else "TButton")
+        self._ab_b_btn.config(
+            style="Accent.TButton" if self._ab_slots["B"] else "TButton")
 
     # ── Actions ────────────────────────────────────────────────────────────
 
