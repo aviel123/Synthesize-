@@ -83,13 +83,13 @@ class KickTab(ttk.Frame):
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        synth_frame = ttk.Frame(notebook, padding="10")
+        synth_frame = ttk.Frame(notebook, padding="14 10")
         notebook.add(synth_frame, text="Synthesis")
 
-        fx_frame = ttk.Frame(notebook, padding="10")
+        fx_frame = ttk.Frame(notebook, padding="14 10")
         notebook.add(fx_frame, text="Effects")
 
-        bass_frame_tab = ttk.Frame(notebook, padding="10")
+        bass_frame_tab = ttk.Frame(notebook, padding="14 10")
         notebook.add(bass_frame_tab, text="Bassline & Export")
 
         # ── Synthesis Tab ──────────────────────────────────────────────────
@@ -119,7 +119,7 @@ class KickTab(ttk.Frame):
         ttk.Label(q_frame, text="(1=Std, 2=HQ Oversampled)").pack(side=tk.LEFT, padx=5)
 
         # Body & Pitch group
-        ttk.Label(synth_frame, text="── Body & Pitch ──", foreground="gray").pack(anchor=tk.W, pady=(8, 2))
+        self._section_header(synth_frame, "Body & Pitch")
         self.create_slider(synth_frame, "Body Frequency (Hz)", 35.0, 90.0,  55.0,  "body_freq")
         self.create_slider(synth_frame, "Body Decay (ms)",     100.0, 800.0, 500.0, "body_decay")
         self.create_slider(synth_frame, "Punch Start (semitones)", 8.0, 40.0, 24.0, "punch_semitones")
@@ -128,8 +128,7 @@ class KickTab(ttk.Frame):
         self.create_slider(synth_frame, "Start Phase (deg)",    0.0,  360.0,  0.0,  "phase")
 
         # Envelope visualizer (linked to punch_decay, body_decay, duration)
-        ttk.Label(synth_frame, text="── Amplitude Envelope ──",
-                  foreground="gray").pack(anchor=tk.W, pady=(8, 2))
+        self._section_header(synth_frame, "Amplitude Envelope")
         self._env_editor = EnvelopeEditor(
             synth_frame,
             vars_dict={
@@ -141,7 +140,7 @@ class KickTab(ttk.Frame):
         self._env_editor.pack(fill=tk.X, pady=4)
 
         # Transient group
-        ttk.Label(synth_frame, text="── Transient ──", foreground="gray").pack(anchor=tk.W, pady=(8, 2))
+        self._section_header(synth_frame, "Transient")
         self.create_slider(synth_frame, "Click/Noise Level",    0.0,  3.0,   0.8,  "click_level")
         self.create_slider(synth_frame, "Click Decay (ms)",     1.0,  50.0,  7.0,  "click_decay")
         self.create_slider(synth_frame, "Click Width (Stereo)", 0.0,  2.0,   0.3,  "click_width")
@@ -151,8 +150,7 @@ class KickTab(ttk.Frame):
         self.create_slider(fx_frame, "Reverb Amount",         0.0,  1.0, 0.0, "reverb")
         self.create_slider(fx_frame, "Delay Amount",          0.0,  1.0, 0.0, "delay")
 
-        ttk.Separator(fx_frame, orient="horizontal").pack(fill=tk.X, pady=8)
-        ttk.Label(fx_frame, text="── Distortion ──", foreground="gray").pack(anchor=tk.W, pady=(0, 4))
+        self._section_header(fx_frame, "Distortion")
 
         dist_type_frame = ttk.Frame(fx_frame)
         dist_type_frame.pack(fill=tk.X, pady=3)
@@ -165,9 +163,7 @@ class KickTab(ttk.Frame):
 
         self.create_slider(fx_frame, "Distortion Amount", 0.0, 1.0, 0.0, "distortion_amount")
 
-        ttk.Separator(fx_frame, orient="horizontal").pack(fill=tk.X, pady=8)
-        ttk.Label(fx_frame, text="── LFO (body modulation) ──",
-                  foreground="gray").pack(anchor=tk.W, pady=(0, 4))
+        self._section_header(fx_frame, "LFO (body modulation)")
 
         lfo_target_frame = ttk.Frame(fx_frame)
         lfo_target_frame.pack(fill=tk.X, pady=3)
@@ -209,9 +205,9 @@ class KickTab(ttk.Frame):
         # ── Bottom button rows ─────────────────────────────────────────────
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=(8, 2))
-        self.generate_btn = ttk.Button(btn_frame, text="Generate Kick",
+        self.generate_btn = ttk.Button(btn_frame, text="  Generate Kick  ",
                                        command=self.generate)
-        self.generate_btn.pack(side=tk.LEFT, padx=5)
+        self.generate_btn.pack(side=tk.LEFT, padx=5, ipady=4)
         ttk.Button(btn_frame, text="Randomize 🎲",
                    command=self.randomize).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Save Preset…",
@@ -244,23 +240,58 @@ class KickTab(ttk.Frame):
 
     # ── Helpers ────────────────────────────────────────────────────────────
 
+    def _section_header(self, parent, title):
+        """Bold section title with a full-width separator line to the right."""
+        frm = ttk.Frame(parent)
+        frm.pack(fill=tk.X, pady=(10, 3))
+        ttk.Label(frm, text=title,
+                  font=("TkDefaultFont", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Separator(frm, orient="horizontal").pack(
+            side=tk.LEFT, fill=tk.X, expand=True, pady=4)
+
+    _UNIT_MAP = {
+        "freq": "Hz", "rate": "Hz", "hz": "Hz",
+        "decay": "ms", "duration": "s",
+        "drive": "dB", "semitones": "st", "phase": "°",
+    }
+
+    def _unit_for(self, var_name):
+        vn = var_name.lower()
+        for key, unit in self._UNIT_MAP.items():
+            if key in vn:
+                return unit
+        return ""
+
     def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
         frame = ttk.Frame(parent)
-        frame.pack(fill=tk.X, pady=3)
+        frame.pack(fill=tk.X, pady=2)
 
-        ttk.Label(frame, text=label_text, width=25).pack(side=tk.LEFT)
+        ttk.Label(frame, text=label_text, width=26).pack(side=tk.LEFT)
+
+        # Smart decimal places based on parameter range
+        span = max_val - min_val
+        if span >= 100:
+            fmt = "{:.0f}"
+        elif span >= 5:
+            fmt = "{:.1f}"
+        else:
+            fmt = "{:.2f}"
+
+        unit = self._unit_for(var_name)
 
         var = tk.DoubleVar(value=default_val)
         scale = ttk.Scale(frame, from_=min_val, to=max_val,
                           orient=tk.HORIZONTAL, variable=var, length=200)
-        scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 2))
 
-        val_lbl = ttk.Label(frame, text=f"{default_val:.1f}", width=7)
-        val_lbl.pack(side=tk.LEFT, padx=5)
+        def _fmt(v):
+            s = fmt.format(float(v))
+            return f"{s} {unit}" if unit else s
 
-        def update_label(v):
-            val_lbl.config(text=f"{float(v):.1f}")
-        scale.config(command=update_label)
+        val_lbl = ttk.Label(frame, text=_fmt(default_val), width=9, anchor="e")
+        val_lbl.pack(side=tk.LEFT, padx=(0, 4))
+
+        scale.config(command=lambda v: val_lbl.config(text=_fmt(v)))
 
         self.vars[var_name] = var
 

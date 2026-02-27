@@ -12,43 +12,53 @@ class MainWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("Euphoria Trance Drum Designer")
-        self.root.geometry("800x600")
+        self.root.geometry("860x680")
+        self.root.minsize(760, 560)
 
         # Style
         style = ttk.Style()
         style.theme_use('clam')
 
         # Main Container
-        main_container = ttk.Frame(root, padding="10")
+        main_container = ttk.Frame(root, padding="12 8")
         main_container.pack(fill=tk.BOTH, expand=True)
 
-        # Title
-        title_label = ttk.Label(main_container, text="Trance Drum Designer", font=("Helvetica", 16, "bold"))
-        title_label.pack(pady=(0, 10))
+        # ── Header ──────────────────────────────────────────────────────
+        header_frame = ttk.Frame(main_container)
+        header_frame.pack(fill=tk.X, pady=(0, 6))
 
-        # File Output Frame (Shared)
-        file_frame = ttk.Frame(main_container)
-        file_frame.pack(fill=tk.X, pady=10)
+        ttk.Label(
+            header_frame,
+            text="Euphoria Trance Drum Designer",
+            font=("Helvetica", 15, "bold"),
+        ).pack(side=tk.LEFT)
 
-        ttk.Label(file_frame, text="Output Filename:").pack(side=tk.LEFT)
+        # File output inline with header (right side)
         self.filename_var = tk.StringVar(value="output.wav")
-        entry = ttk.Entry(file_frame, textvariable=self.filename_var, width=30)
-        entry.pack(side=tk.LEFT, padx=10)
-        browse_btn = ttk.Button(file_frame, text="Browse...", command=self._browse_output)
-        browse_btn.pack(side=tk.LEFT)
+        ttk.Label(header_frame, text="Output:").pack(side=tk.RIGHT, padx=(8, 2))
+        ttk.Button(header_frame, text="Browse…",
+                   command=self._browse_output).pack(side=tk.RIGHT, padx=(0, 4))
+        ttk.Entry(header_frame, textvariable=self.filename_var,
+                  width=26).pack(side=tk.RIGHT, padx=(0, 4))
 
-        # Status
-        self.status_var = tk.StringVar()
-        status_label = ttk.Label(main_container, textvariable=self.status_var, foreground="green")
-        status_label.pack(side=tk.BOTTOM, pady=10)
+        ttk.Separator(main_container, orient="horizontal").pack(fill=tk.X, pady=(4, 8))
 
-        # Visualizer
-        self.visualizer = WaveformVisualizer(main_container, height=120)
-        self.visualizer.pack(fill=tk.X, expand=False, pady=10)
+        # ── Visualizer ──────────────────────────────────────────────────
+        self.visualizer = WaveformVisualizer(main_container, height=130)
+        self.visualizer.pack(fill=tk.X, expand=False, pady=(0, 6))
 
-        # Tabs
+        # ── Status bar ──────────────────────────────────────────────────
+        status_bar = ttk.Frame(main_container, relief="sunken")
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_var = tk.StringVar(value="Ready.")
+        ttk.Label(
+            status_bar, textvariable=self.status_var,
+            foreground="#2a7a2a", anchor="w", padding="4 2",
+        ).pack(fill=tk.X)
+
+        # ── Tabs ────────────────────────────────────────────────────────
         self.notebook = ttk.Notebook(main_container)
-        self.notebook.pack(fill=tk.BOTH, expand=True, pady=10)
+        self.notebook.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
 
         # Kick Tab
         self.kick_tab = KickTab(self.notebook, self)
