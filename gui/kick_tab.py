@@ -5,6 +5,7 @@ import json
 import random as _random
 from generators.kick_generator import TranceKickGenerator
 from gui.envelope_editor import EnvelopeEditor
+from gui.tooltip import Tooltip
 
 # ---------------------------------------------------------------------------
 # Presets – tuned for professional trance kick styles
@@ -120,12 +121,30 @@ class KickTab(ttk.Frame):
 
         # Body & Pitch group
         self._section_header(synth_frame, "Body & Pitch")
-        self.create_slider(synth_frame, "Body Frequency (Hz)", 35.0, 90.0,  55.0,  "body_freq")
-        self.create_slider(synth_frame, "Body Decay (ms)",     100.0, 800.0, 500.0, "body_decay")
-        self.create_slider(synth_frame, "Punch Start (semitones)", 8.0, 40.0, 24.0, "punch_semitones")
-        self.create_slider(synth_frame, "Punch Decay (ms)",    10.0,  80.0,  40.0, "punch_decay")
-        self.create_slider(synth_frame, "Duration (s)",         0.3,   1.2,   0.6,  "duration")
-        self.create_slider(synth_frame, "Start Phase (deg)",    0.0,  360.0,  0.0,  "phase")
+        self.create_slider(synth_frame, "Body Frequency (Hz)", 35.0, 90.0,  55.0,  "body_freq",
+            tooltip="Fundamental pitch of the sine-wave body.\n"
+                    "Lower = deeper sub-bass (35 Hz).\n"
+                    "Higher = snappier techno kick (90 Hz).")
+        self.create_slider(synth_frame, "Body Decay (ms)",     100.0, 800.0, 500.0, "body_decay",
+            tooltip="How long the body tone sustains before silence.\n"
+                    "Short (100 ms) = punchy techno.\n"
+                    "Long (700+ ms) = deep underground trance tail.")
+        self.create_slider(synth_frame, "Punch Start (semitones)", 8.0, 40.0, 24.0, "punch_semitones",
+            tooltip="How many semitones above Body Frequency the pitch\n"
+                    "sweep starts. Larger = more dramatic downward glide.\n"
+                    "24 st = 2 octaves above body freq.")
+        self.create_slider(synth_frame, "Punch Decay (ms)",    10.0,  80.0,  40.0, "punch_decay",
+            tooltip="Speed of the pitch sweep from Punch Start down\n"
+                    "to Body Frequency.\n"
+                    "Short = snappy attack click. Long = pitched tom feel.")
+        self.create_slider(synth_frame, "Duration (s)",         0.3,   1.2,   0.6,  "duration",
+            tooltip="Total length of the generated WAV sample.\n"
+                    "Shorter = tighter, punchy kick.\n"
+                    "Longer = more sustain / room for reverb tail.")
+        self.create_slider(synth_frame, "Start Phase (deg)",    0.0,  360.0,  0.0,  "phase",
+            tooltip="Starting phase of the sine oscillator in degrees.\n"
+                    "0° = normal polarity.\n"
+                    "180° = phase-inverted (useful for mono-compat checks).")
 
         # Envelope visualizer (linked to punch_decay, body_decay, duration)
         self._section_header(synth_frame, "Amplitude Envelope")
@@ -141,14 +160,32 @@ class KickTab(ttk.Frame):
 
         # Transient group
         self._section_header(synth_frame, "Transient")
-        self.create_slider(synth_frame, "Click/Noise Level",    0.0,  3.0,   0.8,  "click_level")
-        self.create_slider(synth_frame, "Click Decay (ms)",     1.0,  50.0,  7.0,  "click_decay")
-        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0,  2.0,   0.3,  "click_width")
+        self.create_slider(synth_frame, "Click/Noise Level",    0.0,  3.0,   0.8,  "click_level",
+            tooltip="Amplitude of the noise-burst transient layered\n"
+                    "at the attack. Higher = more crack and presence.\n"
+                    "0 = pure sine body only.")
+        self.create_slider(synth_frame, "Click Decay (ms)",     1.0,  50.0,  7.0,  "click_decay",
+            tooltip="How fast the click/noise layer fades.\n"
+                    "Very short (1–3 ms) = transient pop only.\n"
+                    "Longer = noise sweep into the body.")
+        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0,  2.0,   0.3,  "click_width",
+            tooltip="Stereo width of the click/noise layer.\n"
+                    "0 = mono centre. 1+ = wide stereo transient.\n"
+                    "Body remains mono; only the click is widened.")
 
         # ── Effects Tab ───────────────────────────────────────────────────
-        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.0, "drive")
-        self.create_slider(fx_frame, "Reverb Amount",         0.0,  1.0, 0.0, "reverb")
-        self.create_slider(fx_frame, "Delay Amount",          0.0,  1.0, 0.0, "delay")
+        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.0, "drive",
+            tooltip="Soft-saturation gain applied before the limiter.\n"
+                    "Adds harmonic warmth and perceived loudness.\n"
+                    "2–5 dB = subtle glue. 8+ dB = aggressive saturation.")
+        self.create_slider(fx_frame, "Reverb Amount",         0.0,  1.0, 0.0, "reverb",
+            tooltip="Amount of room reverb mixed with the dry signal.\n"
+                    "Keep low (0–0.1) for club kicks — reverb eats punch.\n"
+                    "Useful for experimental or cinematic kicks.")
+        self.create_slider(fx_frame, "Delay Amount",          0.0,  1.0, 0.0, "delay",
+            tooltip="Short delay effect mix level.\n"
+                    "Usually 0 for standard kick drums.\n"
+                    "Subtle delay can add width or tempo-synced echo.")
 
         self._section_header(fx_frame, "Distortion")
 
@@ -161,7 +198,10 @@ class KickTab(ttk.Frame):
             state="readonly", width=14,
         ).pack(side=tk.LEFT)
 
-        self.create_slider(fx_frame, "Distortion Amount", 0.0, 1.0, 0.0, "distortion_amount")
+        self.create_slider(fx_frame, "Distortion Amount", 0.0, 1.0, 0.0, "distortion_amount",
+            tooltip="Intensity of the chosen distortion algorithm.\n"
+                    "0 = clean bypass. 0.3 = subtle grit. 1 = fully clipped.\n"
+                    "Pair with Distortion Type for different timbres.")
 
         self._section_header(fx_frame, "LFO (body modulation)")
 
@@ -183,8 +223,14 @@ class KickTab(ttk.Frame):
             state="readonly", width=12,
         ).pack(side=tk.LEFT)
 
-        self.create_slider(fx_frame, "LFO Rate (Hz)",  0.05, 20.0, 2.0, "lfo_rate_hz")
-        self.create_slider(fx_frame, "LFO Depth",      0.0,   1.0, 0.0, "lfo_depth")
+        self.create_slider(fx_frame, "LFO Rate (Hz)",  0.05, 20.0, 2.0, "lfo_rate_hz",
+            tooltip="Oscillation speed of the LFO in cycles per second.\n"
+                    "0.5–2 Hz = slow wobble / wub-wub effect.\n"
+                    "10–20 Hz = fast tremolo / ring-mod character.")
+        self.create_slider(fx_frame, "LFO Depth",      0.0,   1.0, 0.0, "lfo_depth",
+            tooltip="How much the LFO modulates the target parameter.\n"
+                    "0 = LFO is off (no modulation).\n"
+                    "0.2–0.5 = subtle movement. 1.0 = full sweep.")
 
         # ── Bassline Tab ──────────────────────────────────────────────────
         bass_frame = ttk.LabelFrame(bass_frame_tab,
@@ -196,8 +242,14 @@ class KickTab(ttk.Frame):
         ttk.Checkbutton(bass_frame, text="Generate Bassline Loop (138 BPM)",
                         variable=self.vars["bass"]).pack(anchor=tk.W)
 
-        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq")
-        self.create_slider(bass_frame, "Sidechain Depth",      0.0,   1.0,  0.8,  "sc_depth")
+        self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq",
+            tooltip="Root frequency of the generated bassline loop.\n"
+                    "Should complement Body Frequency (e.g. same note or 5th).\n"
+                    "30–50 Hz = sub bass. 60–100 Hz = mid bass.")
+        self.create_slider(bass_frame, "Sidechain Depth",      0.0,   1.0,  0.8,  "sc_depth",
+            tooltip="Depth of kick-triggered sidechain volume ducking\n"
+                    "applied to the bassline. 0 = no ducking. 1 = full cut.\n"
+                    "0.7–0.9 = classic pumping trance/techno feel.")
 
         ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)",
                    command=self.export_trigger).pack(pady=5)
@@ -262,11 +314,13 @@ class KickTab(ttk.Frame):
                 return unit
         return ""
 
-    def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
+    def create_slider(self, parent, label_text, min_val, max_val, default_val,
+                      var_name, tooltip: str = ""):
         frame = ttk.Frame(parent)
         frame.pack(fill=tk.X, pady=2)
 
-        ttk.Label(frame, text=label_text, width=26).pack(side=tk.LEFT)
+        lbl = ttk.Label(frame, text=label_text, width=26)
+        lbl.pack(side=tk.LEFT)
 
         # Smart decimal places based on parameter range
         span = max_val - min_val
@@ -292,6 +346,10 @@ class KickTab(ttk.Frame):
         val_lbl.pack(side=tk.LEFT, padx=(0, 4))
 
         scale.config(command=lambda v: val_lbl.config(text=_fmt(v)))
+
+        if tooltip:
+            Tooltip(lbl,   tooltip)
+            Tooltip(scale, tooltip)
 
         self.vars[var_name] = var
 
