@@ -22,12 +22,24 @@ class TestTranceKickGenerator:
         assert self.gen.num_samples == 22050
 
     def test_generate_punch_shape(self):
-        punch = self.gen.generate_punch()
+        punch = self.gen.generate_punch(base_freq=55.0, start_semitones=24, decay_ms=40.0)
         assert punch.shape == (22050,)
 
+    def test_generate_punch_frequency_params(self):
+        # Punch should accept new parameters without error
+        punch = self.gen.generate_punch(base_freq=60.0, start_semitones=20, decay_ms=35.0)
+        assert punch.shape == (22050,)
+        assert not np.any(np.isnan(punch))
+
     def test_generate_body_shape(self):
-        body = self.gen.generate_body()
+        body = self.gen.generate_body(body_freq=55.0, decay_ms=500.0)
         assert body.shape == (22050,)
+
+    def test_generate_body_frequency_params(self):
+        # Body should accept new parameters
+        body = self.gen.generate_body(body_freq=48.0, decay_ms=700.0)
+        assert body.shape == (22050,)
+        assert not np.any(np.isnan(body))
 
     def test_generate_click_mono(self):
         click = self.gen.generate_click(level=1.0, decay_ms=10.0, width=0.0)

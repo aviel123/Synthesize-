@@ -3,93 +3,163 @@ from tkinter import ttk, filedialog, messagebox
 import threading
 from generators.kick_generator import TranceKickGenerator
 
+# ---------------------------------------------------------------------------
+# Presets – tuned for professional trance kick styles
+# ---------------------------------------------------------------------------
+KICK_PRESETS = {
+    "Buzzism Euphoria": {
+        "duration": 0.6, "body_freq": 55.0, "punch_semitones": 24,
+        "punch_decay": 40.0, "body_decay": 500.0,
+        "click_level": 0.8, "click_decay": 7.0, "click_width": 0.3,
+        "drive": 4.0, "reverb": 0.0, "delay": 0.0,
+        "oversample": 2, "phase": 0.0,
+    },
+    "Classic Trance": {
+        "duration": 0.5, "body_freq": 60.0, "punch_semitones": 20,
+        "punch_decay": 35.0, "body_decay": 400.0,
+        "click_level": 1.0, "click_decay": 10.0, "click_width": 0.0,
+        "drive": 5.0, "reverb": 0.0, "delay": 0.0,
+        "oversample": 1, "phase": 0.0,
+    },
+    "Deep Underground": {
+        "duration": 0.8, "body_freq": 48.0, "punch_semitones": 18,
+        "punch_decay": 50.0, "body_decay": 700.0,
+        "click_level": 0.6, "click_decay": 5.0, "click_width": 0.0,
+        "drive": 3.0, "reverb": 0.1, "delay": 0.0,
+        "oversample": 2, "phase": 0.0,
+    },
+    "Hard Trance": {
+        "duration": 0.4, "body_freq": 65.0, "punch_semitones": 30,
+        "punch_decay": 30.0, "body_decay": 250.0,
+        "click_level": 1.5, "click_decay": 12.0, "click_width": 0.2,
+        "drive": 7.0, "reverb": 0.0, "delay": 0.0,
+        "oversample": 1, "phase": 0.0,
+    },
+}
+
+
 class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
         super().__init__(parent)
         self.main_window = main_window
         self.vars = {}
 
-        # Notebook for Kick internal Tabs
+        # Internal notebook
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Tab 1: Synthesis
         synth_frame = ttk.Frame(notebook, padding="10")
         notebook.add(synth_frame, text="Synthesis")
 
-        # Tab 2: Effects
         fx_frame = ttk.Frame(notebook, padding="10")
         notebook.add(fx_frame, text="Effects")
 
-        # Tab 3: Bassline/Export
         bass_frame_tab = ttk.Frame(notebook, padding="10")
         notebook.add(bass_frame_tab, text="Bassline & Export")
 
-        # --- Synthesis Tab ---
+        # ── Synthesis Tab ──────────────────────────────────────────────────
 
-        # Quality/Oversampling
+        # Presets row
+        preset_frame = ttk.Frame(synth_frame)
+        preset_frame.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(preset_frame, text="Preset:", width=20).pack(side=tk.LEFT)
+        self._preset_var = tk.StringVar(value="Buzzism Euphoria")
+        preset_cb = ttk.Combobox(
+            preset_frame, textvariable=self._preset_var,
+            values=list(KICK_PRESETS.keys()), state="readonly", width=22
+        )
+        preset_cb.pack(side=tk.LEFT, padx=4)
+        preset_cb.bind("<<ComboboxSelected>>", self._load_preset)
+        ttk.Button(preset_frame, text="Load", command=self._load_preset).pack(side=tk.LEFT)
+
+        ttk.Separator(synth_frame, orient="horizontal").pack(fill=tk.X, pady=6)
+
+        # Quality / Oversampling
         q_frame = ttk.Frame(synth_frame)
-        q_frame.pack(fill=tk.X, pady=5)
+        q_frame.pack(fill=tk.X, pady=3)
         ttk.Label(q_frame, text="Quality Mode:", width=25).pack(side=tk.LEFT)
-        self.vars["oversample"] = tk.IntVar(value=1)
-        q_combo = ttk.Combobox(q_frame, textvariable=self.vars["oversample"], values=[1, 2], state="readonly", width=5)
-        q_combo.pack(side=tk.LEFT)
-        ttk.Label(q_frame, text="(1=Std, 2=High/Oversampled)").pack(side=tk.LEFT, padx=5)
+        self.vars["oversample"] = tk.IntVar(value=2)
+        ttk.Combobox(q_frame, textvariable=self.vars["oversample"],
+                     values=[1, 2], state="readonly", width=5).pack(side=tk.LEFT)
+        ttk.Label(q_frame, text="(1=Std, 2=HQ Oversampled)").pack(side=tk.LEFT, padx=5)
 
-        self.create_slider(synth_frame, "Duration (s)", 0.1, 1.0, 0.5, "duration")
-        self.create_slider(synth_frame, "Start Phase (deg)", 0.0, 360.0, 0.0, "phase")
-        self.create_slider(synth_frame, "Click/Noise Level", 0.0, 3.0, 1.0, "click_level")
-        self.create_slider(synth_frame, "Click Decay (ms)", 5.0, 100.0, 10.0, "click_decay")
-        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0, 2.0, 0.0, "click_width")
+        # Body & Pitch group
+        ttk.Label(synth_frame, text="── Body & Pitch ──", foreground="gray").pack(anchor=tk.W, pady=(8, 2))
+        self.create_slider(synth_frame, "Body Frequency (Hz)", 35.0, 90.0,  55.0,  "body_freq")
+        self.create_slider(synth_frame, "Body Decay (ms)",     100.0, 800.0, 500.0, "body_decay")
+        self.create_slider(synth_frame, "Punch Start (semitones)", 8.0, 40.0, 24.0, "punch_semitones")
+        self.create_slider(synth_frame, "Punch Decay (ms)",    10.0,  80.0,  40.0, "punch_decay")
+        self.create_slider(synth_frame, "Duration (s)",         0.3,   1.2,   0.6,  "duration")
+        self.create_slider(synth_frame, "Start Phase (deg)",    0.0,  360.0,  0.0,  "phase")
 
-        # --- Effects Tab ---
-        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.5, "drive")
-        self.create_slider(fx_frame, "Reverb Amount", 0.0, 1.0, 0.0, "reverb")
-        self.create_slider(fx_frame, "Delay Amount", 0.0, 1.0, 0.0, "delay")
+        # Transient group
+        ttk.Label(synth_frame, text="── Transient ──", foreground="gray").pack(anchor=tk.W, pady=(8, 2))
+        self.create_slider(synth_frame, "Click/Noise Level",    0.0,  3.0,   0.8,  "click_level")
+        self.create_slider(synth_frame, "Click Decay (ms)",     1.0,  50.0,  7.0,  "click_decay")
+        self.create_slider(synth_frame, "Click Width (Stereo)", 0.0,  2.0,   0.3,  "click_width")
 
-        # --- Bassline Tab ---
-        bass_frame = ttk.LabelFrame(bass_frame_tab, text="Bassline & Sidechain (VST/DAW Integration)", padding="10")
+        # ── Effects Tab ───────────────────────────────────────────────────
+        self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.0, "drive")
+        self.create_slider(fx_frame, "Reverb Amount",         0.0,  1.0, 0.0, "reverb")
+        self.create_slider(fx_frame, "Delay Amount",          0.0,  1.0, 0.0, "delay")
+
+        # ── Bassline Tab ──────────────────────────────────────────────────
+        bass_frame = ttk.LabelFrame(bass_frame_tab,
+                                    text="Bassline & Sidechain (VST/DAW Integration)",
+                                    padding="10")
         bass_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        # Checkbox for Bassline
         self.vars["bass"] = tk.BooleanVar(value=False)
-        bass_chk = ttk.Checkbutton(bass_frame, text="Generate Bassline Loop (138 BPM)", variable=self.vars["bass"])
-        bass_chk.pack(anchor=tk.W)
+        ttk.Checkbutton(bass_frame, text="Generate Bassline Loop (138 BPM)",
+                        variable=self.vars["bass"]).pack(anchor=tk.W)
 
-        # Bass Freq
         self.create_slider(bass_frame, "Bass Frequency (Hz)", 30.0, 100.0, 55.0, "bass_freq")
-        # Sidechain Depth
-        self.create_slider(bass_frame, "Sidechain Depth", 0.0, 1.0, 0.8, "sc_depth")
+        self.create_slider(bass_frame, "Sidechain Depth",      0.0,   1.0,  0.8,  "sc_depth")
 
-        # Export Trigger Button
-        trigger_btn = ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)", command=self.export_trigger)
-        trigger_btn.pack(pady=5)
+        ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)",
+                   command=self.export_trigger).pack(pady=5)
 
-        # Generate Button for this tab
+        # Generate button
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=10)
         self.generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
         self.generate_btn.pack(side=tk.LEFT, padx=5)
 
+        # Load the default preset
+        self._load_preset()
+
+    # ── Helpers ────────────────────────────────────────────────────────────
+
     def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
         frame = ttk.Frame(parent)
-        frame.pack(fill=tk.X, pady=5)
+        frame.pack(fill=tk.X, pady=3)
 
-        lbl = ttk.Label(frame, text=label_text, width=25)
-        lbl.pack(side=tk.LEFT)
+        ttk.Label(frame, text=label_text, width=25).pack(side=tk.LEFT)
 
         var = tk.DoubleVar(value=default_val)
-        scale = ttk.Scale(frame, from_=min_val, to=max_val, orient=tk.HORIZONTAL, variable=var, length=200)
+        scale = ttk.Scale(frame, from_=min_val, to=max_val,
+                          orient=tk.HORIZONTAL, variable=var, length=200)
         scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        val_lbl = ttk.Label(frame, text=f"{default_val:.2f}", width=6)
+        val_lbl = ttk.Label(frame, text=f"{default_val:.1f}", width=7)
         val_lbl.pack(side=tk.LEFT, padx=5)
 
         def update_label(v):
-            val_lbl.config(text=f"{float(v):.2f}")
+            val_lbl.config(text=f"{float(v):.1f}")
         scale.config(command=update_label)
 
         self.vars[var_name] = var
+
+    def _load_preset(self, event=None):
+        name = self._preset_var.get()
+        preset = KICK_PRESETS.get(name)
+        if not preset:
+            return
+        for key, val in preset.items():
+            if key in self.vars:
+                self.vars[key].set(val)
+
+    # ── Actions ────────────────────────────────────────────────────────────
 
     def export_trigger(self):
         try:
@@ -103,32 +173,43 @@ class KickTab(ttk.Frame):
         self.generate_btn.config(state="disabled")
         self.main_window.status_var.set("Generating Kick...")
 
-        # Collect all parameters before spawning thread
-        oversample = self.vars["oversample"].get()
-        duration = self.vars["duration"].get()
-        phase = self.vars["phase"].get()
-        click_level = self.vars["click_level"].get()
-        click_decay = self.vars["click_decay"].get()
-        click_width = self.vars["click_width"].get()
-        drive = self.vars["drive"].get()
-        reverb = self.vars["reverb"].get()
-        delay = self.vars["delay"].get()
+        # Snapshot all params before spawning thread
+        oversample    = self.vars["oversample"].get()
+        body_freq     = self.vars["body_freq"].get()
+        body_decay    = self.vars["body_decay"].get()
+        punch_semi    = int(round(self.vars["punch_semitones"].get()))
+        punch_decay   = self.vars["punch_decay"].get()
+        duration      = self.vars["duration"].get()
+        phase         = self.vars["phase"].get()
+        click_level   = self.vars["click_level"].get()
+        click_decay   = self.vars["click_decay"].get()
+        click_width   = self.vars["click_width"].get()
+        drive         = self.vars["drive"].get()
+        reverb        = self.vars["reverb"].get()
+        delay         = self.vars["delay"].get()
         generate_bass = self.vars["bass"].get()
-        bass_freq = self.vars["bass_freq"].get()
-        sc_depth = self.vars["sc_depth"].get()
+        bass_freq     = self.vars["bass_freq"].get()
+        sc_depth      = self.vars["sc_depth"].get()
+
         filename = self.main_window.filename_var.get()
         if not filename.endswith('.wav'):
             filename += '.wav'
+
         smoke_params = None
         if hasattr(self.main_window, 'smoke_tab'):
             smoke_params = self.main_window.smoke_tab.get_params()
 
         def _run():
             try:
-                generator = TranceKickGenerator(duration=duration)
-                audio = generator.generate(
+                gen = TranceKickGenerator(duration=duration)
+                audio = gen.generate(
+                    body_freq=body_freq,
+                    punch_semitones=punch_semi,
+                    punch_decay_ms=punch_decay,
+                    body_decay_ms=body_decay,
                     click_level=click_level,
                     click_decay_ms=click_decay,
+                    click_width=click_width,
                     drive_db=drive,
                     reverb_amount=reverb,
                     delay_amount=delay,
@@ -136,18 +217,16 @@ class KickTab(ttk.Frame):
                     bass_freq=bass_freq,
                     sc_depth=sc_depth,
                     oversample=oversample,
-                    click_width=click_width,
                     phase_deg=phase,
-                    smoke_params=smoke_params
+                    smoke_params=smoke_params,
                 )
-                generator.save(filename, audio)
+                gen.save(filename, audio)
 
                 def _done():
                     self.main_window.status_var.set(f"Saved to {filename}")
                     if hasattr(self.main_window, 'visualizer'):
                         self.main_window.visualizer.update_plot(audio)
                     self.generate_btn.config(state="normal")
-
                 self.after(0, _done)
 
             except Exception as e:
