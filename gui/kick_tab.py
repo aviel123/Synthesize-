@@ -7,7 +7,6 @@ class KickTab(ttk.Frame):
     def __init__(self, parent, main_window):
         super().__init__(parent)
         self.main_window = main_window
-        # self.pack(fill=tk.BOTH, expand=True) # Managed by Notebook
         self.vars = {}
 
         # Notebook for Kick internal Tabs
@@ -69,8 +68,8 @@ class KickTab(ttk.Frame):
         # Generate Button for this tab
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=10)
-        generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
-        generate_btn.pack(side=tk.LEFT, padx=5)
+        self.generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
+        self.generate_btn.pack(side=tk.LEFT, padx=5)
 
     def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
         frame = ttk.Frame(parent)
@@ -101,60 +100,61 @@ class KickTab(ttk.Frame):
             messagebox.showerror("Error", str(e))
 
     def generate(self):
-        try:
-            # Get values
-            oversample = self.vars["oversample"].get()
-            duration = self.vars["duration"].get()
-            phase = self.vars["phase"].get()
-            click_level = self.vars["click_level"].get()
-            click_decay = self.vars["click_decay"].get()
-            click_width = self.vars["click_width"].get()
-            drive = self.vars["drive"].get()
-            reverb = self.vars["reverb"].get()
-            delay = self.vars["delay"].get()
+        self.generate_btn.config(state="disabled")
+        self.main_window.status_var.set("Generating Kick...")
 
-            # Bassline params
-            generate_bass = self.vars["bass"].get()
-            bass_freq = self.vars["bass_freq"].get()
-            sc_depth = self.vars["sc_depth"].get()
+        # Collect all parameters before spawning thread
+        oversample = self.vars["oversample"].get()
+        duration = self.vars["duration"].get()
+        phase = self.vars["phase"].get()
+        click_level = self.vars["click_level"].get()
+        click_decay = self.vars["click_decay"].get()
+        click_width = self.vars["click_width"].get()
+        drive = self.vars["drive"].get()
+        reverb = self.vars["reverb"].get()
+        delay = self.vars["delay"].get()
+        generate_bass = self.vars["bass"].get()
+        bass_freq = self.vars["bass_freq"].get()
+        sc_depth = self.vars["sc_depth"].get()
+        filename = self.main_window.filename_var.get()
+        if not filename.endswith('.wav'):
+            filename += '.wav'
+        smoke_params = None
+        if hasattr(self.main_window, 'smoke_tab'):
+            smoke_params = self.main_window.smoke_tab.get_params()
 
-            filename = self.main_window.filename_var.get()
+        def _run():
+            try:
+                generator = TranceKickGenerator(duration=duration)
+                audio = generator.generate(
+                    click_level=click_level,
+                    click_decay_ms=click_decay,
+                    drive_db=drive,
+                    reverb_amount=reverb,
+                    delay_amount=delay,
+                    generate_bass=generate_bass,
+                    bass_freq=bass_freq,
+                    sc_depth=sc_depth,
+                    oversample=oversample,
+                    click_width=click_width,
+                    phase_deg=phase,
+                    smoke_params=smoke_params
+                )
+                generator.save(filename, audio)
 
-            if not filename.endswith('.wav'):
-                filename += '.wav'
+                def _done():
+                    self.main_window.status_var.set(f"Saved to {filename}")
+                    if hasattr(self.main_window, 'visualizer'):
+                        self.main_window.visualizer.update_plot(audio)
+                    self.generate_btn.config(state="normal")
 
-            # Get smoke params from SmokeTab if available
-            smoke_params = None
-            if hasattr(self.main_window, 'smoke_tab'):
-                smoke_params = self.main_window.smoke_tab.get_params()
+                self.after(0, _done)
 
-            self.main_window.status_var.set("Generating Kick...")
-            self.update_idletasks()
+            except Exception as e:
+                def _err():
+                    messagebox.showerror("Error", str(e))
+                    self.main_window.status_var.set("Error generating kick.")
+                    self.generate_btn.config(state="normal")
+                self.after(0, _err)
 
-            # Run generation
-            generator = TranceKickGenerator(duration=duration)
-            audio = generator.generate(
-                click_level=click_level,
-                click_decay_ms=click_decay,
-                drive_db=drive,
-                reverb_amount=reverb,
-                delay_amount=delay,
-                generate_bass=generate_bass,
-                bass_freq=bass_freq,
-                sc_depth=sc_depth,
-                oversample=oversample,
-                click_width=click_width,
-                phase_deg=phase,
-                smoke_params=smoke_params
-            )
-            generator.save(filename, audio)
-
-            self.main_window.status_var.set(f"Saved to {filename}")
-
-            # Update Visualizer if present
-            if hasattr(self.main_window, 'visualizer'):
-                self.main_window.visualizer.update_plot(audio)
-
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-            self.main_window.status_var.set("Error generating kick.")
+        threading.Thread(target=_run, daemon=True).start()

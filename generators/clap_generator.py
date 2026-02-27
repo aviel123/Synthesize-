@@ -1,38 +1,5 @@
 import numpy as np
 from scipy.signal import butter, lfilter
-from effects.stereo import apply_stereo_width
-
-def apply_stereo_width(signal, width=0.0):
-    """
-    Local simplified stereo widener if import fails or for custom behavior.
-    Decorrelates L/R by delaying one channel.
-    """
-    if width <= 0.001:
-        return signal
-
-    # Mono to Pseudo Stereo
-    # Delay Right Channel by 10-20ms
-    delay_ms = 12.0
-    sr = 44100
-    delay_samples = int(delay_ms * sr / 1000.0)
-
-    L = signal
-    R = np.zeros_like(signal)
-
-    # R is delayed version
-    if len(signal) > delay_samples:
-        R[delay_samples:] = signal[:-delay_samples]
-
-    # Mix
-    # Width 0 = Mono (L=R=Signal)
-    # Width 1 = Hard Pan (L=Signal, R=Delayed)
-
-    # Actually standard widener:
-    # Mid = Signal
-    # Side = (L-R) -> Here L=Sig, R=Sig_Delayed -> Side = Comb Filtered
-
-    # Let's just return L/R array
-    return np.vstack((L, R))
 
 
 class ClapGenerator:
@@ -41,14 +8,32 @@ class ClapGenerator:
         self.duration = 0.5 # Default duration
         self.num_samples = int(sample_rate * self.duration)
 
+    def _apply_haas_stereo(self, signal, width):
+        """
+        Creates pseudo-stereo from a mono signal using the Haas effect (short delay).
+        Uses self.sample_rate so it works correctly at any sample rate.
+        """
+        delay_ms = 12.0
+        delay_samples = int(delay_ms * self.sample_rate / 1000.0)
+
+        L = signal.copy()
+        R = np.zeros_like(signal)
+
+        if len(signal) > delay_samples:
+            R[delay_samples:] = signal[:-delay_samples]
+
+        # Blend towards mono when width is low
+        mid = (L + R) * 0.5
+        L_out = mid + (L - mid) * width
+        R_out = mid + (R - mid) * width
+
+        return np.vstack((L_out, R_out))
+
     def _create_reflections(self, num_reflections=5, spacing_ms=8.0):
         """
         Creates the 'machine clap' effect using spaced impulses/noise bursts.
         """
-        # Reflections are typically noise bursts played in rapid succession
-
         spacing_samples = int(spacing_ms * self.sample_rate / 1000.0)
-        total_len = spacing_samples * num_reflections + 1000 # buffer
 
         # Create single burst
         burst_len_ms = 4.0
@@ -82,7 +67,6 @@ class ClapGenerator:
         """
         Creates the initial sharp attack using filtered noise + sine burst.
         """
-        # Noise burst
         noise = np.random.uniform(-1, 1, self.num_samples)
 
         # Bandpass filter for "snap" (1kHz - 5kHz)
@@ -106,10 +90,7 @@ class ClapGenerator:
         """
         Creates the main body/tail of the clap using pink/white noise.
         """
-        # Pink noise approximation (1/f)
         white = np.random.normal(0, 1, self.num_samples)
-        # Simple 1/f filter: -3dB/octave? Or just lowpass white noise.
-        # Let's use white noise with a specific filter for "clap" character
 
         # Bandpass 800Hz - 8000Hz
         nyquist = 0.5 * self.sample_rate
@@ -124,7 +105,6 @@ class ClapGenerator:
 
         env = np.zeros_like(t)
         if decay_samples > 0:
-            # Exponential decay
             k = 5.0 / (length_ms / 1000.0)
             env[:decay_samples] = np.exp(-k * t[:decay_samples])
 
@@ -148,19 +128,8 @@ class ClapGenerator:
         if max_val > 0:
             mix = mix / max_val * 0.95
 
-        # Apply Stereo Width
-        # If width > 0, we need to create stereo content.
-        # The simple Apply Stereo Width assumes stereo input or just duplicates mono.
-        # To truly widen a clap, we can pan reflections or delay channels slightly.
-
+        # Apply Haas-effect stereo widening (delay-based pseudo-stereo)
         if stereo_width > 0.001:
-            # Create decorrelated tail/reflections
-            # Simple Haasz effect or delay L/R
-
-            # Use utility from effects
-            mix = apply_stereo_width(mix, width=stereo_width)
-
-            # Or better: Pan reflections alternating L/R?
-            # That's complex for now. Let's stick to the utility which handles basic widening.
+            mix = self._apply_haas_stereo(mix, width=stereo_width)
 
         return mix

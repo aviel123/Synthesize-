@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import threading
 import numpy as np
 from scipy.io import wavfile
 from generators.clap_generator import ClapGenerator
@@ -8,7 +9,6 @@ class ClapTab(ttk.Frame):
     def __init__(self, parent, main_window):
         super().__init__(parent)
         self.main_window = main_window
-        # self.pack(fill=tk.BOTH, expand=True) # Managed by Notebook
         self.vars = {}
 
         # --- Synthesis Controls ---
@@ -24,8 +24,8 @@ class ClapTab(ttk.Frame):
         # Generate Button for this tab
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=10)
-        generate_btn = ttk.Button(btn_frame, text="Generate Clap", command=self.generate)
-        generate_btn.pack(side=tk.LEFT, padx=5)
+        self.generate_btn = ttk.Button(btn_frame, text="Generate Clap", command=self.generate)
+        self.generate_btn.pack(side=tk.LEFT, padx=5)
 
     def create_slider(self, parent, label_text, min_val, max_val, default_val, var_name):
         frame = ttk.Frame(parent)
@@ -48,53 +48,55 @@ class ClapTab(ttk.Frame):
         self.vars[var_name] = var
 
     def generate(self):
-        try:
-            # Get values
-            transient = self.vars["transient_level"].get()
-            reflections = int(self.vars["reflections"].get())
-            spacing = self.vars["spacing"].get()
-            tail = self.vars["tail_length"].get()
-            width = self.vars["width"].get()
+        self.generate_btn.config(state="disabled")
+        self.main_window.status_var.set("Generating Clap...")
 
-            filename = self.main_window.filename_var.get()
+        # Collect parameters before thread
+        transient = self.vars["transient_level"].get()
+        reflections = int(self.vars["reflections"].get())
+        spacing = self.vars["spacing"].get()
+        tail = self.vars["tail_length"].get()
+        width = self.vars["width"].get()
 
-            # Auto-rename if needed to avoid overwriting kick
-            if filename == "output.wav" or filename.endswith("kick.wav"):
-                filename = "clap_output.wav"
-                self.main_window.filename_var.set(filename)
+        filename = self.main_window.filename_var.get()
+        if filename == "output.wav" or filename.endswith("kick.wav"):
+            filename = "clap_output.wav"
+            self.main_window.filename_var.set(filename)
+        if not filename.endswith('.wav'):
+            filename += '.wav'
 
-            if not filename.endswith('.wav'):
-                filename += '.wav'
+        def _run():
+            try:
+                generator = ClapGenerator()
+                audio = generator.generate(
+                    transient_level=transient,
+                    tail_length_ms=tail,
+                    reflections=reflections,
+                    spacing_ms=spacing,
+                    stereo_width=width
+                )
 
-            self.main_window.status_var.set("Generating Clap...")
-            self.update_idletasks()
+                if audio.ndim == 2:
+                    audio_save = audio.T
+                else:
+                    audio_save = audio
 
-            # Run generation
-            generator = ClapGenerator()
-            audio = generator.generate(
-                transient_level=transient,
-                tail_length_ms=tail,
-                reflections=reflections,
-                spacing_ms=spacing,
-                stereo_width=width
-            )
+                scaled = np.int16(audio_save * 32767)
+                wavfile.write(filename, 44100, scaled)
 
-            # Save
-            # Transpose if stereo
-            if audio.ndim == 2:
-                audio_save = audio.T
-            else:
-                audio_save = audio
+                def _done():
+                    self.main_window.status_var.set(f"Saved to {filename}")
+                    if hasattr(self.main_window, 'visualizer'):
+                        self.main_window.visualizer.update_plot(audio)
+                    self.generate_btn.config(state="normal")
 
-            scaled = np.int16(audio_save * 32767)
-            wavfile.write(filename, 44100, scaled)
+                self.after(0, _done)
 
-            self.main_window.status_var.set(f"Saved to {filename}")
+            except Exception as e:
+                def _err():
+                    messagebox.showerror("Error", str(e))
+                    self.main_window.status_var.set("Error generating clap.")
+                    self.generate_btn.config(state="normal")
+                self.after(0, _err)
 
-            # Update Visualizer if present
-            if hasattr(self.main_window, 'visualizer'):
-                self.main_window.visualizer.update_plot(audio)
-
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-            self.main_window.status_var.set("Error generating clap.")
+        threading.Thread(target=_run, daemon=True).start()

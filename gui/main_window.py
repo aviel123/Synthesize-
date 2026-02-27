@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import os
 from gui.kick_tab import KickTab
 from gui.clap_tab import ClapTab
@@ -33,6 +33,8 @@ class MainWindow:
         self.filename_var = tk.StringVar(value="output.wav")
         entry = ttk.Entry(file_frame, textvariable=self.filename_var, width=30)
         entry.pack(side=tk.LEFT, padx=10)
+        browse_btn = ttk.Button(file_frame, text="Browse...", command=self._browse_output)
+        browse_btn.pack(side=tk.LEFT)
 
         # Status
         self.status_var = tk.StringVar()
@@ -62,6 +64,15 @@ class MainWindow:
         # Combo/Pattern Tab
         self.combo_tab = ComboTab(self.notebook, self)
         self.notebook.add(self.combo_tab, text="Pattern/Combo")
+
+    def _browse_output(self):
+        path = filedialog.asksaveasfilename(
+            defaultextension=".wav",
+            filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+            initialfile=self.filename_var.get(),
+        )
+        if path:
+            self.filename_var.set(path)
 
 if __name__ == "__main__":
     root = tk.Tk()
