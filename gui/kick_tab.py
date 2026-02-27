@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
+import json
 from generators.kick_generator import TranceKickGenerator
 
 # ---------------------------------------------------------------------------
@@ -119,11 +120,13 @@ class KickTab(ttk.Frame):
         ttk.Button(bass_frame, text="Export Sidechain Trigger (Click)",
                    command=self.export_trigger).pack(pady=5)
 
-        # Generate button
+        # Bottom button bar: Generate | Save Preset | Load Preset
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, pady=10)
         self.generate_btn = ttk.Button(btn_frame, text="Generate Kick", command=self.generate)
         self.generate_btn.pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Save Preset…", command=self.save_preset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Load Preset…", command=self.load_preset_file).pack(side=tk.LEFT, padx=5)
 
         # Load the default preset
         self._load_preset()
@@ -158,6 +161,55 @@ class KickTab(ttk.Frame):
         for key, val in preset.items():
             if key in self.vars:
                 self.vars[key].set(val)
+
+    # ── Preset Import / Export ─────────────────────────────────────────────
+
+    def _current_params(self):
+        """Collect all current slider/control values into a plain dict."""
+        params = {}
+        for key, var in self.vars.items():
+            params[key] = var.get()
+        params["_preset_name"] = self._preset_var.get()
+        return params
+
+    def save_preset(self):
+        """Save the current parameters to a JSON file chosen by the user."""
+        path = filedialog.asksaveasfilename(
+            title="Save Kick Preset",
+            defaultextension=".json",
+            filetypes=[("Kick Preset", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w") as f:
+                json.dump(self._current_params(), f, indent=2)
+            self.main_window.status_var.set(f"Preset saved: {path}")
+        except Exception as e:
+            messagebox.showerror("Save Error", str(e))
+
+    def load_preset_file(self):
+        """Load parameters from a previously saved JSON preset file."""
+        path = filedialog.askopenfilename(
+            title="Load Kick Preset",
+            filetypes=[("Kick Preset", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path) as f:
+                params = json.load(f)
+            for key, val in params.items():
+                if key.startswith("_"):
+                    continue
+                if key in self.vars:
+                    self.vars[key].set(val)
+            name = params.get("_preset_name", "")
+            if name:
+                self._preset_var.set(name)
+            self.main_window.status_var.set(f"Preset loaded: {path}")
+        except Exception as e:
+            messagebox.showerror("Load Error", str(e))
 
     # ── Actions ────────────────────────────────────────────────────────────
 

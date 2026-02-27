@@ -256,7 +256,7 @@ class TranceKickGenerator:
         return self._finalize_generation(processed, generate_bass, bass_freq, bpm=138.0, sc_depth=sc_depth)
 
     def _finalize_generation(self, processed, generate_bass, bass_freq, bpm, sc_depth):
-        processed = apply_limiter(processed)
+        processed = apply_limiter(processed, sample_rate=self.sample_rate)
 
         if generate_bass:
             beat_len = 60.0 / bpm
