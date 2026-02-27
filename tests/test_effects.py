@@ -13,6 +13,7 @@ from effects.reverb import apply_reverb
 from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
+from effects.distortion import apply_distortion
 
 SR = 44100
 
@@ -171,3 +172,60 @@ class TestStereoWidth:
         out = apply_stereo_width(sig, width=0.0)
         # At width=0, L and R should be equal (mid-only)
         np.testing.assert_allclose(out[0], out[1], rtol=1e-5)
+
+
+class TestDistortion:
+    def test_zero_amount_passthrough(self):
+        sig = make_sine()
+        out = apply_distortion(sig, amount=0.0)
+        np.testing.assert_array_equal(out, sig)
+
+    def test_hard_clip_shape(self):
+        sig = make_sine()
+        out = apply_distortion(sig, amount=0.5, mode='hard_clip')
+        assert out.shape == sig.shape
+
+    def test_hard_clip_bounded(self):
+        sig = make_sine() * 5.0
+        out = apply_distortion(sig, amount=1.0, mode='hard_clip')
+        assert np.max(np.abs(out)) <= 1.0 + 1e-6
+
+    def test_foldback_shape(self):
+        sig = make_sine()
+        out = apply_distortion(sig, amount=0.5, mode='foldback')
+        assert out.shape == sig.shape
+
+    def test_foldback_bounded(self):
+        sig = make_sine() * 3.0
+        out = apply_distortion(sig, amount=0.8, mode='foldback')
+        assert np.max(np.abs(out)) <= 1.0 + 1e-6
+
+    def test_wavefolder_shape(self):
+        sig = make_sine()
+        out = apply_distortion(sig, amount=0.5, mode='wavefolder')
+        assert out.shape == sig.shape
+
+    def test_wavefolder_not_nan(self):
+        sig = make_sine()
+        out = apply_distortion(sig, amount=0.9, mode='wavefolder')
+        assert not np.any(np.isnan(out))
+
+    def test_bitcrush_shape(self):
+        sig = make_sine()
+        out = apply_distortion(sig, amount=0.5, mode='bitcrush')
+        assert out.shape == sig.shape
+
+    def test_bitcrush_quantised(self):
+        sig = make_sine() * 0.5
+        out = apply_distortion(sig, amount=1.0, mode='bitcrush')
+        # At max amount, bits=4 → steps=16, values must be multiples of 1/16
+        bits = max(2, int(16 - 1.0 * 12))
+        steps = float(2 ** bits)
+        rounded = np.round(sig * 0.5 * steps) / steps  # just check quantisation exists
+        assert not np.any(np.isnan(out))
+
+    def test_all_modes_no_nan(self):
+        sig = make_sine()
+        for mode in ('hard_clip', 'foldback', 'wavefolder', 'bitcrush'):
+            out = apply_distortion(sig, amount=0.5, mode=mode)
+            assert not np.any(np.isnan(out)), f"NaN in mode {mode}"

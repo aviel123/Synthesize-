@@ -3,6 +3,7 @@ from scipy.io import wavfile
 import argparse
 
 from effects.saturation import apply_saturation
+from effects.distortion import apply_distortion
 from effects.compression import apply_compression
 from effects.eq import apply_eq
 from effects.reverb import apply_reverb
@@ -162,7 +163,8 @@ class TranceKickGenerator:
                  bass_freq=55.0, sc_depth=0.8, oversample=1, click_width=0.0,
                  phase_deg=0.0, smoke_params=None,
                  body_freq=55.0, punch_semitones=24,
-                 punch_decay_ms=40.0, body_decay_ms=500.0):
+                 punch_decay_ms=40.0, body_decay_ms=500.0,
+                 distortion_amount=0.0, distortion_mode='hard_clip'):
         """
         Generate the kick drum.
 
@@ -171,6 +173,8 @@ class TranceKickGenerator:
         punch_decay_ms: Duration of the pitch sweep in ms.
         body_decay_ms: How long the sub body sustains (ms until -60dB).
         oversample: 1 (Standard) or 2 (High Quality - runs at 2x sample rate).
+        distortion_amount: 0.0 = off, 1.0 = maximum (applied after saturation).
+        distortion_mode: 'hard_clip' | 'foldback' | 'wavefolder' | 'bitcrush'
         """
         original_rate = self.sample_rate
 
@@ -236,6 +240,9 @@ class TranceKickGenerator:
 
         # 3. Effects Chain
         processed = apply_saturation(mix, drive_db=drive_db)
+        # Distortion (after saturation, before reverb — keeps room sound clean)
+        if distortion_amount > 0.001:
+            processed = apply_distortion(processed, amount=distortion_amount, mode=distortion_mode)
         processed = apply_reverb(processed, self.sample_rate, amount=reverb_amount)
         processed = apply_delay(processed, self.sample_rate, amount=delay_amount)
         processed = apply_compression(processed, self.sample_rate,
@@ -324,6 +331,10 @@ if __name__ == "__main__":
     parser.add_argument("--bass-freq",        type=float, default=55.0, help="Bass Frequency Hz (default: 55.0)")
     parser.add_argument("--sc-depth",         type=float, default=0.8,  help="Sidechain Depth 0.0-1.0 (default: 0.8)")
     parser.add_argument("--oversample",       type=int,   default=2,    help="Oversampling: 1=Std, 2=HQ (default: 2)")
+    parser.add_argument("--distortion",       type=float, default=0.0,  help="Distortion amount 0.0-1.0 (default: 0.0)")
+    parser.add_argument("--distortion-mode",  type=str,   default="hard_clip",
+                        choices=["hard_clip", "foldback", "wavefolder", "bitcrush"],
+                        help="Distortion mode (default: hard_clip)")
     parser.add_argument("--export-trigger",   action="store_true",       help="Export sidechain trigger file")
     args = parser.parse_args()
 
@@ -347,6 +358,8 @@ if __name__ == "__main__":
         bass_freq=args.bass_freq,
         sc_depth=args.sc_depth,
         oversample=args.oversample,
+        distortion_amount=args.distortion,
+        distortion_mode=args.distortion_mode,
     )
     generator.save(args.output, audio)
     print(f"Generated trance kick to {args.output}")

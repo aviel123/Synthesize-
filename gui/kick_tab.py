@@ -13,6 +13,7 @@ KICK_PRESETS = {
         "punch_decay": 40.0, "body_decay": 500.0,
         "click_level": 0.8, "click_decay": 7.0, "click_width": 0.3,
         "drive": 4.0, "reverb": 0.0, "delay": 0.0,
+        "distortion_amount": 0.0, "distortion_type": "hard_clip",
         "oversample": 2, "phase": 0.0,
     },
     "Classic Trance": {
@@ -20,6 +21,7 @@ KICK_PRESETS = {
         "punch_decay": 35.0, "body_decay": 400.0,
         "click_level": 1.0, "click_decay": 10.0, "click_width": 0.0,
         "drive": 5.0, "reverb": 0.0, "delay": 0.0,
+        "distortion_amount": 0.0, "distortion_type": "hard_clip",
         "oversample": 1, "phase": 0.0,
     },
     "Deep Underground": {
@@ -27,6 +29,7 @@ KICK_PRESETS = {
         "punch_decay": 50.0, "body_decay": 700.0,
         "click_level": 0.6, "click_decay": 5.0, "click_width": 0.0,
         "drive": 3.0, "reverb": 0.1, "delay": 0.0,
+        "distortion_amount": 0.0, "distortion_type": "hard_clip",
         "oversample": 2, "phase": 0.0,
     },
     "Hard Trance": {
@@ -34,7 +37,32 @@ KICK_PRESETS = {
         "punch_decay": 30.0, "body_decay": 250.0,
         "click_level": 1.5, "click_decay": 12.0, "click_width": 0.2,
         "drive": 7.0, "reverb": 0.0, "delay": 0.0,
+        "distortion_amount": 0.25, "distortion_type": "hard_clip",
         "oversample": 1, "phase": 0.0,
+    },
+    "Hard Techno": {
+        "duration": 0.45, "body_freq": 58.0, "punch_semitones": 32,
+        "punch_decay": 22.0, "body_decay": 180.0,
+        "click_level": 2.2, "click_decay": 14.0, "click_width": 0.4,
+        "drive": 9.0, "reverb": 0.0, "delay": 0.0,
+        "distortion_amount": 0.65, "distortion_type": "hard_clip",
+        "oversample": 2, "phase": 0.0,
+    },
+    "Industrial Foldback": {
+        "duration": 0.5, "body_freq": 50.0, "punch_semitones": 36,
+        "punch_decay": 28.0, "body_decay": 300.0,
+        "click_level": 1.8, "click_decay": 18.0, "click_width": 0.5,
+        "drive": 6.0, "reverb": 0.05, "delay": 0.0,
+        "distortion_amount": 0.75, "distortion_type": "foldback",
+        "oversample": 2, "phase": 0.0,
+    },
+    "Metallic Wavefold": {
+        "duration": 0.5, "body_freq": 62.0, "punch_semitones": 28,
+        "punch_decay": 25.0, "body_decay": 220.0,
+        "click_level": 1.6, "click_decay": 10.0, "click_width": 0.3,
+        "drive": 5.0, "reverb": 0.0, "delay": 0.0,
+        "distortion_amount": 0.55, "distortion_type": "wavefolder",
+        "oversample": 2, "phase": 0.0,
     },
 }
 
@@ -44,6 +72,7 @@ class KickTab(ttk.Frame):
         super().__init__(parent)
         self.main_window = main_window
         self.vars = {}
+        self._distortion_type_var = tk.StringVar(value="hard_clip")
 
         # Internal notebook
         notebook = ttk.Notebook(self)
@@ -67,7 +96,7 @@ class KickTab(ttk.Frame):
         self._preset_var = tk.StringVar(value="Buzzism Euphoria")
         preset_cb = ttk.Combobox(
             preset_frame, textvariable=self._preset_var,
-            values=list(KICK_PRESETS.keys()), state="readonly", width=22
+            values=list(KICK_PRESETS.keys()), state="readonly", width=20
         )
         preset_cb.pack(side=tk.LEFT, padx=4)
         preset_cb.bind("<<ComboboxSelected>>", self._load_preset)
@@ -103,6 +132,20 @@ class KickTab(ttk.Frame):
         self.create_slider(fx_frame, "Saturation Drive (dB)", 0.0, 12.0, 4.0, "drive")
         self.create_slider(fx_frame, "Reverb Amount",         0.0,  1.0, 0.0, "reverb")
         self.create_slider(fx_frame, "Delay Amount",          0.0,  1.0, 0.0, "delay")
+
+        ttk.Separator(fx_frame, orient="horizontal").pack(fill=tk.X, pady=8)
+        ttk.Label(fx_frame, text="── Distortion ──", foreground="gray").pack(anchor=tk.W, pady=(0, 4))
+
+        dist_type_frame = ttk.Frame(fx_frame)
+        dist_type_frame.pack(fill=tk.X, pady=3)
+        ttk.Label(dist_type_frame, text="Distortion Type:", width=25).pack(side=tk.LEFT)
+        ttk.Combobox(
+            dist_type_frame, textvariable=self._distortion_type_var,
+            values=["hard_clip", "foldback", "wavefolder", "bitcrush"],
+            state="readonly", width=14,
+        ).pack(side=tk.LEFT)
+
+        self.create_slider(fx_frame, "Distortion Amount", 0.0, 1.0, 0.0, "distortion_amount")
 
         # ── Bassline Tab ──────────────────────────────────────────────────
         bass_frame = ttk.LabelFrame(bass_frame_tab,
@@ -159,7 +202,9 @@ class KickTab(ttk.Frame):
         if not preset:
             return
         for key, val in preset.items():
-            if key in self.vars:
+            if key == "distortion_type":
+                self._distortion_type_var.set(val)
+            elif key in self.vars:
                 self.vars[key].set(val)
 
     # ── Preset Import / Export ─────────────────────────────────────────────
@@ -169,6 +214,7 @@ class KickTab(ttk.Frame):
         params = {}
         for key, var in self.vars.items():
             params[key] = var.get()
+        params["distortion_type"] = self._distortion_type_var.get()
         params["_preset_name"] = self._preset_var.get()
         return params
 
@@ -202,7 +248,9 @@ class KickTab(ttk.Frame):
             for key, val in params.items():
                 if key.startswith("_"):
                     continue
-                if key in self.vars:
+                if key == "distortion_type":
+                    self._distortion_type_var.set(val)
+                elif key in self.vars:
                     self.vars[key].set(val)
             name = params.get("_preset_name", "")
             if name:
@@ -226,22 +274,24 @@ class KickTab(ttk.Frame):
         self.main_window.status_var.set("Generating Kick...")
 
         # Snapshot all params before spawning thread
-        oversample    = self.vars["oversample"].get()
-        body_freq     = self.vars["body_freq"].get()
-        body_decay    = self.vars["body_decay"].get()
-        punch_semi    = int(round(self.vars["punch_semitones"].get()))
-        punch_decay   = self.vars["punch_decay"].get()
-        duration      = self.vars["duration"].get()
-        phase         = self.vars["phase"].get()
-        click_level   = self.vars["click_level"].get()
-        click_decay   = self.vars["click_decay"].get()
-        click_width   = self.vars["click_width"].get()
-        drive         = self.vars["drive"].get()
-        reverb        = self.vars["reverb"].get()
-        delay         = self.vars["delay"].get()
-        generate_bass = self.vars["bass"].get()
-        bass_freq     = self.vars["bass_freq"].get()
-        sc_depth      = self.vars["sc_depth"].get()
+        oversample       = self.vars["oversample"].get()
+        body_freq        = self.vars["body_freq"].get()
+        body_decay       = self.vars["body_decay"].get()
+        punch_semi       = int(round(self.vars["punch_semitones"].get()))
+        punch_decay      = self.vars["punch_decay"].get()
+        duration         = self.vars["duration"].get()
+        phase            = self.vars["phase"].get()
+        click_level      = self.vars["click_level"].get()
+        click_decay      = self.vars["click_decay"].get()
+        click_width      = self.vars["click_width"].get()
+        drive            = self.vars["drive"].get()
+        reverb           = self.vars["reverb"].get()
+        delay            = self.vars["delay"].get()
+        distortion_amt   = self.vars["distortion_amount"].get()
+        distortion_mode  = self._distortion_type_var.get()
+        generate_bass    = self.vars["bass"].get()
+        bass_freq        = self.vars["bass_freq"].get()
+        sc_depth         = self.vars["sc_depth"].get()
 
         filename = self.main_window.filename_var.get()
         if not filename.endswith('.wav'):
@@ -265,6 +315,8 @@ class KickTab(ttk.Frame):
                     drive_db=drive,
                     reverb_amount=reverb,
                     delay_amount=delay,
+                    distortion_amount=distortion_amt,
+                    distortion_mode=distortion_mode,
                     generate_bass=generate_bass,
                     bass_freq=bass_freq,
                     sc_depth=sc_depth,
