@@ -6,6 +6,7 @@ from gui.clap_tab import ClapTab
 from gui.combo_tab import ComboTab
 from gui.smoke_tab import SmokeTab
 from gui.visualizers import WaveformVisualizer
+from gui.sequencer_tab import SequencerTab
 
 class MainWindow:
     def __init__(self, root):
@@ -64,6 +65,10 @@ class MainWindow:
         # Combo/Pattern Tab
         self.combo_tab = ComboTab(self.notebook, self)
         self.notebook.add(self.combo_tab, text="Pattern/Combo")
+
+        # Step Sequencer Tab
+        self.sequencer_tab = SequencerTab(self.notebook, self)
+        self.notebook.add(self.sequencer_tab, text="Sequencer")
 
     def _browse_output(self):
         path = filedialog.asksaveasfilename(

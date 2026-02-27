@@ -3,6 +3,7 @@ from tkinter import ttk, filedialog, messagebox
 import threading
 import json
 from generators.kick_generator import TranceKickGenerator
+from gui.envelope_editor import EnvelopeEditor
 
 # ---------------------------------------------------------------------------
 # Presets – tuned for professional trance kick styles
@@ -121,6 +122,19 @@ class KickTab(ttk.Frame):
         self.create_slider(synth_frame, "Punch Decay (ms)",    10.0,  80.0,  40.0, "punch_decay")
         self.create_slider(synth_frame, "Duration (s)",         0.3,   1.2,   0.6,  "duration")
         self.create_slider(synth_frame, "Start Phase (deg)",    0.0,  360.0,  0.0,  "phase")
+
+        # Envelope visualizer (linked to punch_decay, body_decay, duration)
+        ttk.Label(synth_frame, text="── Amplitude Envelope ──",
+                  foreground="gray").pack(anchor=tk.W, pady=(8, 2))
+        self._env_editor = EnvelopeEditor(
+            synth_frame,
+            vars_dict={
+                "punch_decay": self.vars["punch_decay"],
+                "body_decay":  self.vars["body_decay"],
+                "duration":    self.vars["duration"],
+            },
+        )
+        self._env_editor.pack(fill=tk.X, pady=4)
 
         # Transient group
         ttk.Label(synth_frame, text="── Transient ──", foreground="gray").pack(anchor=tk.W, pady=(8, 2))
