@@ -1,5 +1,8 @@
 import numpy as np
 from scipy.signal import butter, lfilter
+from logger import get_logger
+
+_log = get_logger(__name__)
 
 
 class ClapGenerator:
@@ -111,6 +114,10 @@ class ClapGenerator:
         return filtered * env
 
     def generate(self, transient_level=1.0, tail_length_ms=100.0, reflections=5, spacing_ms=8.0, stereo_width=0.0):
+        _log.debug(
+            "Generating clap: transient=%.2f, tail=%.0f ms, reflections=%d, width=%.2f",
+            transient_level, tail_length_ms, reflections, stereo_width,
+        )
         # 1. Transient (Attack)
         transient = self._create_transient() * transient_level
 

@@ -107,6 +107,15 @@ class MainWindow:
         # Persist window geometry on close
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+        # ── Keyboard shortcuts ───────────────────────────────────────────
+        self.root.bind_all("<Control-g>", self._shortcut_generate)
+        self.root.bind_all("<Control-G>", self._shortcut_generate)
+        self.root.bind_all("<Control-r>", self._shortcut_randomize)
+        self.root.bind_all("<Control-R>", self._shortcut_randomize)
+        self.root.bind_all("<Control-s>", self._shortcut_save_preset)
+        self.root.bind_all("<Control-S>", self._shortcut_save_preset)
+        self.root.bind_all("<F5>",        self._shortcut_generate)
+
     # ── Progress helpers (called from generator tabs) ─────────────────
 
     def start_progress(self) -> None:
@@ -140,6 +149,36 @@ class MainWindow:
     def _on_close(self):
         config.save({"window_geometry": self.root.geometry()})
         self.root.destroy()
+
+    # ── Keyboard shortcut handlers ────────────────────────────────────
+
+    def _shortcut_generate(self, _event=None):
+        """Ctrl+G / F5 — generate on the currently visible tab."""
+        try:
+            tab_idx = self.notebook.index(self.notebook.select())
+        except Exception:
+            return
+        tabs = [self.kick_tab, self.clap_tab, None, self.combo_tab, None]
+        if tab_idx < len(tabs) and tabs[tab_idx] is not None:
+            tabs[tab_idx].generate()
+
+    def _shortcut_randomize(self, _event=None):
+        """Ctrl+R — randomize kick parameters (only on Kick tab)."""
+        try:
+            tab_idx = self.notebook.index(self.notebook.select())
+        except Exception:
+            return
+        if tab_idx == 0:
+            self.kick_tab.randomize()
+
+    def _shortcut_save_preset(self, _event=None):
+        """Ctrl+S — save kick preset (only on Kick tab)."""
+        try:
+            tab_idx = self.notebook.index(self.notebook.select())
+        except Exception:
+            return
+        if tab_idx == 0:
+            self.kick_tab.save_preset()
 
 
 if __name__ == "__main__":

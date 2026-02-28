@@ -1,5 +1,9 @@
 import numpy as np
 from scipy.signal import butter, lfilter
+from logger import get_logger
+
+_log = get_logger(__name__)
+
 
 class AdvancedNoiseGenerator:
     """
@@ -99,6 +103,8 @@ class AdvancedNoiseGenerator:
         """
         Trance 'Smoke' Noise generator.
         """
+        _log.debug("Generating smoke: character=%s, hp=%.0f Hz, lp=%.0f Hz, density=%.2f",
+                   character, hp_freq, lp_freq, density)
         num_samples = int(duration * self.sr)
 
         # Base: White Noise

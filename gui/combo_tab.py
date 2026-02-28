@@ -57,6 +57,7 @@ class ComboTab(ttk.Frame):
     def generate(self):
         self.generate_btn.config(state="disabled")
         self.main_window.status_var.set("Generating Combo Loop...")
+        self.main_window.start_progress()
 
         # Collect all parameters before spawning thread
         bpm = self.vars["bpm"].get()
@@ -170,6 +171,7 @@ class ComboTab(ttk.Frame):
                 wavfile.write(filename, 44100, scaled)
 
                 def _done():
+                    self.main_window.stop_progress()
                     self.main_window.status_var.set(f"Saved Combo to {filename}")
                     if hasattr(self.main_window, 'visualizer'):
                         self.main_window.visualizer.update_plot(loop)
@@ -178,8 +180,9 @@ class ComboTab(ttk.Frame):
                 self.after(0, _done)
 
             except Exception as e:
-                def _err():
-                    messagebox.showerror("Error", str(e))
+                def _err(exc=e):
+                    self.main_window.stop_progress()
+                    messagebox.showerror("Generation Error", str(exc))
                     self.main_window.status_var.set("Error generating combo.")
                     self.generate_btn.config(state="normal")
                 self.after(0, _err)
