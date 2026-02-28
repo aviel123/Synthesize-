@@ -1,5 +1,9 @@
 import numpy as np
 from scipy.signal import butter, lfilter
+from logger import get_logger
+
+_log = get_logger(__name__)
+
 
 class AdvancedNoiseGenerator:
     """
@@ -99,6 +103,8 @@ class AdvancedNoiseGenerator:
         """
         Trance 'Smoke' Noise generator.
         """
+        _log.debug("Generating smoke: character=%s, hp=%.0f Hz, lp=%.0f Hz, density=%.2f",
+                   character, hp_freq, lp_freq, density)
         num_samples = int(duration * self.sr)
 
         # Base: White Noise
@@ -156,29 +162,27 @@ class AdvancedNoiseGenerator:
         envelope = np.zeros(samples)
 
         start_sample = int(start_delay_ms * self.sr / 1000.0)
-        fade_in_samples = int(fade_in_ms * self.sr / 1000.0)
-        fade_out_samples = int(fade_out_ms * self.sr / 1000.0)
+        fade_in_samples = max(1, int(fade_in_ms * self.sr / 1000.0))
+        fade_out_samples = max(1, int(fade_out_ms * self.sr / 1000.0))
 
         if start_sample >= samples:
             return envelope
 
-        # Fade In
-        end_fade_in = start_sample + fade_in_samples
-        if end_fade_in > samples: end_fade_in = samples
-
-        for i in range(start_sample, end_fade_in):
-            rel_pos = (i - start_sample) / fade_in_samples
-            envelope[i] = rel_pos ** 2 # Convex fade in
+        # Fade In (vectorized)
+        end_fade_in = min(start_sample + fade_in_samples, samples)
+        if end_fade_in > start_sample:
+            rel_pos = np.arange(end_fade_in - start_sample) / fade_in_samples
+            envelope[start_sample:end_fade_in] = rel_pos ** 2  # Convex fade in
 
         # Sustain
-        sustain_end = samples - fade_out_samples
-        if sustain_end < end_fade_in: sustain_end = end_fade_in
-
+        sustain_end = max(samples - fade_out_samples, end_fade_in)
         envelope[end_fade_in:sustain_end] = 1.0
 
-        # Fade Out
-        for i in range(sustain_end, samples):
-            rel_pos = (i - sustain_end) / fade_out_samples
-            envelope[i] = 1.0 - (rel_pos ** 0.5) # Concave fade out
+        # Fade Out (vectorized)
+        if samples > sustain_end:
+            fade_out_len = samples - sustain_end
+            rel_pos = np.arange(fade_out_len) / fade_out_samples
+            rel_pos = np.clip(rel_pos, 0.0, 1.0)
+            envelope[sustain_end:samples] = 1.0 - (rel_pos ** 0.5)  # Concave fade out
 
         return envelope

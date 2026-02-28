@@ -5,7 +5,7 @@ class SmokeTab(ttk.Frame):
     def __init__(self, parent, main_window):
         super().__init__(parent)
         self.main_window = main_window
-        self.pack(fill=tk.BOTH, expand=True)
+        # Layout is managed by the parent Notebook
         self.vars = {}
 
         # --- Main Frame ---

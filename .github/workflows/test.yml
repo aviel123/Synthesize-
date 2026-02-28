@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libportaudio2 portaudio19-dev \
+            python3-tk tk-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install numpy scipy sounddevice pytest
+
+      - name: Run tests
+        # Use the virtual display so tkinter doesn't crash in CI
+        run: |
+          pip install pytest-xvfb 2>/dev/null || true
+          python -m pytest tests/ -v --tb=short
+        env:
+          DISPLAY: ":99"
+
+      - name: Validate generators (CLI smoke test)
+        run: |
+          python -m generators.kick_generator --output /tmp/ci_kick.wav --duration 0.3
+          test -f /tmp/ci_kick.wav && echo "Kick WAV generated OK"
