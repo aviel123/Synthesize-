@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
+import config
 from gui.kick_tab import KickTab
 from gui.clap_tab import ClapTab
 from gui.combo_tab import ComboTab
@@ -8,16 +9,20 @@ from gui.smoke_tab import SmokeTab
 from gui.visualizers import WaveformVisualizer
 from gui.sequencer_tab import SequencerTab
 
+
 class MainWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("Euphoria Trance Drum Designer")
-        self.root.geometry("860x680")
+
+        # Restore persisted session
+        self._cfg = config.load()
+        self.root.geometry(self._cfg.get("window_geometry", "860x680"))
         self.root.minsize(760, 560)
 
         # Style
         style = ttk.Style()
-        style.theme_use('clam')
+        style.theme_use(self._cfg.get("theme", "clam"))
 
         # Main Container
         main_container = ttk.Frame(root, padding="12 8")
@@ -34,7 +39,11 @@ class MainWindow:
         ).pack(side=tk.LEFT)
 
         # File output inline with header (right side)
-        self.filename_var = tk.StringVar(value="output.wav")
+        self.filename_var = tk.StringVar(
+            value=self._cfg.get("output_filename", "output.wav")
+        )
+        self.filename_var.trace_add("write", self._on_filename_change)
+
         ttk.Label(header_frame, text="Output:").pack(side=tk.RIGHT, padx=(8, 2))
         ttk.Button(header_frame, text="Browse…",
                    command=self._browse_output).pack(side=tk.RIGHT, padx=(0, 4))
@@ -50,11 +59,18 @@ class MainWindow:
         # ── Status bar ──────────────────────────────────────────────────
         status_bar = ttk.Frame(main_container, relief="sunken")
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
         self.status_var = tk.StringVar(value="Ready.")
         ttk.Label(
             status_bar, textvariable=self.status_var,
             foreground="#2a7a2a", anchor="w", padding="4 2",
-        ).pack(fill=tk.X)
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Progress bar (hidden until a generation is running)
+        self.progress = ttk.Progressbar(
+            status_bar, mode="indeterminate", length=160
+        )
+        self.progress.pack(side=tk.RIGHT, padx=(4, 6), pady=2)
 
         # ── Tabs ────────────────────────────────────────────────────────
         self.notebook = ttk.Notebook(main_container)
@@ -80,6 +96,29 @@ class MainWindow:
         self.sequencer_tab = SequencerTab(self.notebook, self)
         self.notebook.add(self.sequencer_tab, text="Sequencer")
 
+        # Restore last active tab
+        last_tab = self._cfg.get("last_tab", 0)
+        try:
+            self.notebook.select(last_tab)
+        except Exception:
+            pass
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
+
+        # Persist window geometry on close
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    # ── Progress helpers (called from generator tabs) ─────────────────
+
+    def start_progress(self) -> None:
+        """Show the indeterminate progress bar and start animation."""
+        self.progress.start(12)
+
+    def stop_progress(self) -> None:
+        """Stop and hide the progress bar."""
+        self.progress.stop()
+
+    # ── Internal callbacks ────────────────────────────────────────────
+
     def _browse_output(self):
         path = filedialog.asksaveasfilename(
             defaultextension=".wav",
@@ -88,6 +127,20 @@ class MainWindow:
         )
         if path:
             self.filename_var.set(path)
+
+    def _on_filename_change(self, *_):
+        config.set("output_filename", self.filename_var.get())
+
+    def _on_tab_change(self, *_):
+        try:
+            config.set("last_tab", self.notebook.index(self.notebook.select()))
+        except Exception:
+            pass
+
+    def _on_close(self):
+        config.save({"window_geometry": self.root.geometry()})
+        self.root.destroy()
+
 
 if __name__ == "__main__":
     root = tk.Tk()

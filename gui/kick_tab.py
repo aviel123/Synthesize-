@@ -527,6 +527,7 @@ class KickTab(ttk.Frame):
     def generate(self):
         self.generate_btn.config(state="disabled")
         self.main_window.status_var.set("Generating Kick...")
+        self.main_window.start_progress()
 
         # Snapshot all params before spawning thread
         oversample       = self.vars["oversample"].get()
@@ -590,6 +591,7 @@ class KickTab(ttk.Frame):
                 gen.save(filename, audio)
 
                 def _done():
+                    self.main_window.stop_progress()
                     self.main_window.status_var.set(f"Saved to {filename}")
                     if hasattr(self.main_window, 'visualizer'):
                         self.main_window.visualizer.update_plot(audio)
@@ -597,8 +599,9 @@ class KickTab(ttk.Frame):
                 self.after(0, _done)
 
             except Exception as e:
-                def _err():
-                    messagebox.showerror("Error", str(e))
+                def _err(exc=e):
+                    self.main_window.stop_progress()
+                    messagebox.showerror("Generation Error", str(exc))
                     self.main_window.status_var.set("Error generating kick.")
                     self.generate_btn.config(state="normal")
                 self.after(0, _err)

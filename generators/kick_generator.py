@@ -2,6 +2,8 @@ import numpy as np
 from scipy.io import wavfile
 import argparse
 
+from logger import get_logger
+from validation import validate_kick_params
 from effects.saturation import apply_saturation
 from effects.distortion import apply_distortion
 from effects.lfo import generate_lfo
@@ -12,6 +14,9 @@ from effects.delay import apply_delay
 from effects.limiter import apply_limiter
 from effects.stereo import apply_stereo_width
 from generators.advanced_noise_generator import AdvancedNoiseGenerator
+
+
+_log = get_logger(__name__)
 
 
 class TranceKickGenerator:
@@ -197,6 +202,34 @@ class TranceKickGenerator:
         lfo_rate_hz:  LFO oscillation speed in Hz
         lfo_depth:    0.0 = off, 1.0 = full modulation
         """
+        validate_kick_params(
+            body_freq=body_freq,
+            punch_semitones=punch_semitones,
+            punch_decay_ms=punch_decay_ms,
+            body_decay_ms=body_decay_ms,
+            duration=self.duration,
+            click_level=click_level,
+            click_decay_ms=click_decay_ms,
+            click_width=click_width,
+            drive_db=drive_db,
+            reverb_amount=reverb_amount,
+            delay_amount=delay_amount,
+            distortion_amount=distortion_amount,
+            distortion_mode=distortion_mode,
+            lfo_target=lfo_target,
+            lfo_waveform=lfo_waveform,
+            lfo_rate_hz=lfo_rate_hz,
+            lfo_depth=lfo_depth,
+            bass_freq=bass_freq,
+            sc_depth=sc_depth,
+            oversample=oversample,
+        )
+        _log.debug(
+            "Generating kick: body_freq=%.1f Hz, body_decay=%.0f ms, "
+            "oversample=%d, distortion=%s(%.2f)",
+            body_freq, body_decay_ms, oversample, distortion_mode, distortion_amount,
+        )
+
         original_rate = self.sample_rate
 
         if oversample > 1:
@@ -244,7 +277,7 @@ class TranceKickGenerator:
                 width = smoke_params.get("width", 85.0) / 100.0
                 smoke_layer = apply_stereo_width(smoke, width)
             except Exception as e:
-                print(f"Error generating smoke layer: {e}")
+                _log.error("Error generating smoke layer: %s", e, exc_info=True)
 
         # 2. Mix layers
         is_stereo = click.ndim == 2 or (smoke_layer is not None and smoke_layer.ndim == 2)
@@ -378,7 +411,7 @@ if __name__ == "__main__":
 
     if args.export_trigger:
         generator.save_sidechain_trigger("sidechain_trigger.wav")
-        print("Exported sidechain_trigger.wav")
+        _log.info("Exported sidechain_trigger.wav")
 
     audio = generator.generate(
         body_freq=args.body_freq,
@@ -398,4 +431,4 @@ if __name__ == "__main__":
         distortion_mode=args.distortion_mode,
     )
     generator.save(args.output, audio)
-    print(f"Generated trance kick to {args.output}")
+    _log.info("Generated trance kick to %s", args.output)
